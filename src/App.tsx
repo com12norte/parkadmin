@@ -1,5 +1,61 @@
 import { useState, useEffect, FC } from "react";
 
+// ── SUPABASE ──
+const SUPABASE_URL = "https://ijefrrtdtjshfquuytic.supabase.co";
+const SUPABASE_KEY = "sb_publishable_sZTDO3ROm8IEnzbWuEUK-w_DeOz65XG";
+
+const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  headers:{
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+    ...(opts.headers||{}),
+  },
+  ...opts,
+});
+
+const loadRegistros = async () => {
+  try {
+    const res = await sbFetch("registros?select=*");
+    const data = await res.json();
+    const records = {};
+    (Array.isArray(data)?data:[]).forEach(r => { records[r.id] = r; });
+    return records;
+  } catch(e) { return {}; }
+};
+
+const upsertRegistro = async (id, record) => {
+  try {
+    await sbFetch("registros", {
+      method: "POST",
+      headers: {"Prefer":"resolution=merge-duplicates,return=representation"},
+      body: JSON.stringify({id, ...record}),
+    });
+  } catch(e) { console.error("upsert error",e); }
+};
+
+const deleteRegistro = async (id) => {
+  try {
+    await sbFetch(`registros?id=eq.${id}`, {method:"DELETE"});
+  } catch(e) { console.error("delete error",e); }
+};
+
+const signIn = async (email, password) => {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({email, password}),
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error_description || data.msg || "Credenciales incorrectas");
+  return data;
+};
+
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
   {id:41,torre:"1080",depto:"A1",sector:1,gx:1,gy:2},{id:46,torre:"1038",depto:"A1",sector:1,gx:1,gy:3},
@@ -1322,14 +1378,51 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 
 // ── ROOT ──
 export default function App() {
-  const [screen,setScreen] = useState("home");
-  const [staffAuth,setStaffAuth] = useState(false);
-  const [records,setRecords] = useState({});
+  const [screen, setScreen] = useState("home");
+  const [staffAuth, setStaffAuth] = useState(false);
+  const [records, setRecords] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecords} onBack={()=>setScreen("home")}/>;
+  // Cargar registros desde Supabase al iniciar
+  useEffect(() => {
+    loadRegistros()
+      .then(data => setRecords(data))
+      .catch(e => console.error("Error cargando registros:", e))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Wrapper para guardar en Supabase al actualizar records
+  const setRecordsAndSync = async (updater) => {
+    setRecords(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      // Detectar cambios y sincronizar
+      Object.entries(next).forEach(([id, rec]) => {
+        if(JSON.stringify(prev[id]) !== JSON.stringify(rec)) {
+          upsertRegistro(Number(id), rec).catch(e => console.error("Error guardando:", e));
+        }
+      });
+      // Detectar eliminaciones
+      Object.keys(prev).forEach(id => {
+        if(!next[id]) {
+          deleteRegistro(Number(id)).catch(e => console.error("Error eliminando:", e));
+        }
+      });
+      return next;
+    });
+  };
+
+  if(loading) return (
+    <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+      <div style={{width:50,height:50,border:"3px solid #1e3a5f",borderTop:"3px solid #3b82f6",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      <div style={{color:"#4b5563",fontSize:13,fontFamily:"monospace"}}>Cargando registros...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
     if(!staffAuth) return <StaffLogin onSuccess={()=>setStaffAuth(true)} onBack={()=>setScreen("home")}/>;
-    return <StaffScreen records={records} setRecords={setRecords} onBack={()=>{setScreen("home");setStaffAuth(false);}}/>;
+    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);}}/>;
   }
   return <HomeScreen onGo={setScreen}/>;
 }
