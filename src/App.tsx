@@ -939,12 +939,24 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       </div>
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>¿Es de visita recurrente?</label>
-                        <div style={{display:"flex",gap:8}}>
+                        <div style={{display:"flex",gap:8,marginBottom:v.esVisita==="si"?10:0}}>
                           {[["si","Sí, es visita"],["no","No, es propio"]].map(([val,label])=>(
                             <button key={val} onClick={()=>updateVeh(i,"esVisita",val)}
                               style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${v.esVisita===val?"#2563eb":"#e2e8f0"}`,background:v.esVisita===val?"#eff6ff":"white",color:v.esVisita===val?"#1d4ed8":"#475569",fontWeight:v.esVisita===val?700:400,fontSize:12,cursor:"pointer"}}>{label}</button>
                           ))}
                         </div>
+                        {v.esVisita==="si" && (
+                          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8,padding:"10px 12px",borderRadius:8,background:"#eff6ff",border:"1px solid #bfdbfe"}}>
+                            <div style={{fontSize:10,fontWeight:700,color:"#1d4ed8",marginBottom:2}}>Datos de la visita</div>
+                            {[["nombreVisita","Nombre visita","Ej: María González"],["telefonoVisita","Teléfono visita","+56 9 ..."]].map(([k,lbl,ph])=>(
+                              <div key={k}>
+                                <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>{lbl}</label>
+                                <input value={v[k]||""} onChange={e=>updateVeh(i,k,e.target.value)} placeholder={ph}
+                                  style={{width:"100%",padding:"8px 10px",borderRadius:7,fontSize:12,border:"1.5px solid #bfdbfe",outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
