@@ -48,15 +48,14 @@ const signIn = async (email, password) => {
       "Content-Type": "application/json",
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "X-Client-Info": "supabase-js/2.0.0",
     },
-    body: JSON.stringify({ email, password, gotrue_meta_security: {} }),
+    body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  if(data.error || data.error_code) {
-    throw new Error(data.error_description || data.msg || data.error || "Credenciales incorrectas");
-  }
-  return data;
+  // Supabase devuelve access_token si es exitoso
+  if (data.access_token) return data;
+  // Si no, lanzar error
+  throw new Error(data.error_description || data.msg || data.error || "Credenciales incorrectas");
 };
 
 const SPOTS_DATA = [
