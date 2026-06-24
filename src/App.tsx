@@ -43,16 +43,19 @@ const deleteRegistro = async (id) => {
 
 const signIn = async (email, password) => {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "X-Client-Info": "supabase-js/2.0.0",
     },
-    body: JSON.stringify({email, password}),
+    body: JSON.stringify({ email, password, gotrue_meta_security: {} }),
   });
   const data = await res.json();
-  if(!res.ok) throw new Error(data.error_description || data.msg || "Credenciales incorrectas");
+  if(data.error || data.error_code) {
+    throw new Error(data.error_description || data.msg || data.error || "Credenciales incorrectas");
+  }
   return data;
 };
 
