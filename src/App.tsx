@@ -743,7 +743,15 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   const validateStep=s=>{
     const e={};
     if(s===1){if(!form.nombre.trim())e.nombre="Requerido";if(!form.tipoResidente)e.tipoResidente="Selecciona una opción";}
-    if(s===2&&!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
+    if(s===2){
+      if(!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
+      if(form.usoEstacionamiento==="ceder"){
+        if(!form.nombreCedido?.trim())e.nombreCedido="Requerido";
+        if(!form.emailCedido?.trim())e.emailCedido="Requerido";
+        if(!form.telefonoCedido?.trim())e.telefonoCedido="Requerido";
+        if(!form.docCedido)e.docCedido="Debes adjuntar el documento de autorización";
+      }
+    }
     if(s===3)form.vehiculos.forEach((v,i)=>{if(!v.patente.trim())e[`pat_${i}`]="Ingresa la patente";});
     return e;
   };
@@ -934,6 +942,60 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                 {radioBtn("usoEstacionamiento","visitas","Se utilizará principalmente para visitas.")}
                 {radioBtn("usoEstacionamiento","ceder","Lo prestaré / cederé a otro comunero.")}
                 {radioBtn("usoEstacionamiento","sin_uso","No tengo vehículo ni lo usaré por ahora.")}
+
+                {/* Datos del comunero beneficiario */}
+                {form.usoEstacionamiento==="ceder" && (
+                  <div style={{marginTop:16,padding:16,borderRadius:12,background:"#f0f9ff",border:"1.5px solid #bae6fd"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                      <span>🤝 Datos del comunero beneficiario</span>
+                      <a href="/declaracion-autorizacion.docx" download
+                        style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,background:"#0369a1",color:"white",fontSize:10,fontWeight:700,textDecoration:"none"}}>
+                        📄 Descargar declaración
+                      </a>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      {[
+                        ["nombreCedido","Nombre completo","Ej: María González","text"],
+                        ["emailCedido","Correo electrónico","correo@ejemplo.com","email"],
+                        ["telefonoCedido","Teléfono","+56 9 ...","tel"],
+                      ].map(([k,lbl,ph,type])=>(
+                        <div key={k}>
+                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
+                          <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
+                            style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                          {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
+                        </div>
+                      ))}
+
+                      {/* Documento de autorización */}
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>
+                          Documento de autorización <span style={{color:"#e53e3e"}}>*</span>
+                        </label>
+                        <div style={{fontSize:11,color:"#64748b",marginBottom:8,lineHeight:1.5}}>
+                          Adjunta la declaración simple firmada por el propietario autorizando el préstamo del estacionamiento.
+                        </div>
+                        <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:9,border:`1.5px dashed ${errors.docCedido?"#e53e3e":form.docCedido?"#0ea5e9":"#bae6fd"}`,background:form.docCedido?"#e0f2fe":"white",cursor:"pointer"}}>
+                          <span style={{fontSize:20}}>{form.docCedido?"📎":"📄"}</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:12,fontWeight:700,color:form.docCedido?"#0369a1":"#475569"}}>
+                              {form.docCedido ? form.docCedido.name : "Seleccionar archivo"}
+                            </div>
+                            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>PDF, JPG, PNG — máx. 5MB</div>
+                          </div>
+                          {form.docCedido && <span style={{fontSize:18}}>✅</span>}
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{display:"none"}}
+                            onChange={e=>{
+                              const f=e.target.files?.[0];
+                              if(f){setFormState(prev=>({...prev,docCedido:f}));setErrors(er=>({...er,docCedido:""}));}
+                            }}/>
+                        </label>
+                        {errors.docCedido&&<span style={{fontSize:10,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.docCedido}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{display:"flex",gap:10,marginTop:20}}>
                   <button onClick={()=>setStep(1)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
                   <button onClick={next} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Continuar →</button>
