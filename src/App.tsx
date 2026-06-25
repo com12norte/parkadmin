@@ -452,21 +452,47 @@ const ConfirmDialog = ({msg,onConfirm,onCancel}) => (
   </div>
 );
 
+// Flag global para evitar múltiples llamadas
+let loginInProgress = false;
+
 // ── STAFF LOGIN ──
-const STAFF_CREDENTIALS = {email:"admin@parkadmin.cl", pass:"Park2024"};
-
 const StaffLogin = ({onSuccess, onBack}) => {
-  const [email,setEmail] = useState("");
-  const [pass,setPass] = useState("");
-  const [error,setError] = useState("");
-  const [show,setShow] = useState(false);
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const login = () => {
-    if(!email.trim()||!pass.trim()){setError("Completa todos los campos.");return;}
-    if(email.trim().toLowerCase()===STAFF_CREDENTIALS.email && pass===STAFF_CREDENTIALS.pass){
-      onSuccess();
-    } else {
-      setError("Correo o contraseña incorrectos.");
+  useEffect(() => { loginInProgress = false; }, []);
+
+  const login = async () => {
+    if(loginInProgress) return;
+    if(!email.trim() || !pass.trim()) { setError("Completa todos los campos."); return; }
+    loginInProgress = true;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ email: email.trim(), password: pass }),
+      });
+      const data = await res.json();
+      if(data.access_token) {
+        loginInProgress = false;
+        onSuccess();
+      } else {
+        setError(data.error_description || data.msg || "Correo o contraseña incorrectos.");
+        loginInProgress = false;
+        setLoading(false);
+      }
+    } catch(e) {
+      setError("Error de conexión. Intenta de nuevo.");
+      loginInProgress = false;
+      setLoading(false);
     }
   };
 
@@ -483,22 +509,27 @@ const StaffLogin = ({onSuccess, onBack}) => {
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
-              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}}
-                onKeyDown={e=>e.key==="Enter"&&login()} placeholder="admin@parkadmin.cl"
+              <input type="email" value={email}
+                onChange={e=>{setEmail(e.target.value);setError("");}}
+                placeholder="correo@ejemplo.com"
                 style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
-              <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}}
-                onKeyDown={e=>e.key==="Enter"&&login()} placeholder="••••••••"
+              <input type="password" value={pass}
+                onChange={e=>{setPass(e.target.value);setError("");}}
+                placeholder="••••••••"
                 style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
-            <button onClick={login} style={{padding:"13px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,.35)",marginTop:4}}>Ingresar →</button>
+            <button onClick={login} disabled={loading}
+              style={{padding:"13px",borderRadius:10,border:"none",background:loading?"#374151":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 14px rgba(37,99,235,.35)",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              {loading?<><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
+            </button>
           </div>
-
         </div>
       </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 };
@@ -976,39 +1007,39 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
               const sc4=SC[found.sector];
               const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario"};
               const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
-              return <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.08)",textAlign:"center"}}>
-                <div style={{background:sc4.bg,padding:"32px 24px 24px"}}>
-                  <div style={{fontSize:52,marginBottom:10}}>✅</div>
-                  <div style={{fontSize:20,fontWeight:900,color:"white",marginBottom:4}}>{isEditing?"✏️ Registro modificado":"¡Registro enviado!"}</div>
-                  <div style={{fontFamily:"monospace",fontSize:28,fontWeight:900,color:sc4.accent}}>#{found.id}</div>
-                  <div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:4}}>{SECTOR_NAMES[found.sector]} · Torre {found.torre} · {found.depto}</div>
-                </div>
-                <div style={{padding:"20px 24px"}}>
-                  <div style={{background:"#f8fafc",borderRadius:10,padding:"14px 16px",textAlign:"left",marginBottom:16,display:"flex",flexDirection:"column",gap:8}}>
-                    <SummaryRow label="Residente" value={form.nombre}/>
-                    <SummaryRow label="Tipo" value={tipoL[form.tipoResidente]||form.tipoResidente}/>
-                    <SummaryRow label="Vehículos" value={form.vehiculos.filter(v=>v.patente).map(v=>v.patente).join(", ")||"—"}/>
-                    <SummaryRow label="Uso" value={usoL[form.usoEstacionamiento]||"—"}/>
+              return <div>
+                <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.08)",textAlign:"center",marginBottom:14}}>
+                  <div style={{background:sc4.bg,padding:"32px 24px 24px"}}>
+                    <div style={{fontSize:52,marginBottom:10}}>✅</div>
+                    <div style={{fontSize:20,fontWeight:900,color:"white",marginBottom:4}}>{isEditing?"✏️ Registro modificado":"¡Registro enviado!"}</div>
+                    <div style={{fontFamily:"monospace",fontSize:28,fontWeight:900,color:sc4.accent}}>#{found.id}</div>
+                    <div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:4}}>{SECTOR_NAMES[found.sector]} · Torre {found.torre} · {found.depto}</div>
                   </div>
-                  <button onClick={resetForm} style={{width:"100%",padding:"12px",borderRadius:9,border:"1.5px solid #2563eb",background:"white",color:"#2563eb",fontWeight:700,fontSize:13,cursor:"pointer"}}>Registrar otra unidad</button>
+                  <div style={{padding:"20px 24px"}}>
+                    <div style={{background:"#f8fafc",borderRadius:10,padding:"14px 16px",textAlign:"left",marginBottom:16,display:"flex",flexDirection:"column",gap:8}}>
+                      <SummaryRow label="Residente" value={form.nombre}/>
+                      <SummaryRow label="Tipo" value={tipoL[form.tipoResidente]||form.tipoResidente}/>
+                      <SummaryRow label="Vehículos" value={form.vehiculos.filter(v=>v.patente).map(v=>v.patente).join(", ")||"—"}/>
+                      <SummaryRow label="Uso" value={usoL[form.usoEstacionamiento]||"—"}/>
+                    </div>
+                    <button onClick={resetForm} style={{width:"100%",padding:"12px",borderRadius:9,border:"1.5px solid #2563eb",background:"white",color:"#2563eb",fontWeight:700,fontSize:13,cursor:"pointer"}}>Registrar otra unidad</button>
+                  </div>
                 </div>
-              </div>
-              {/* Plano del sector */}
-              <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:`2px solid ${sc4.border}40`,marginTop:14}}>
-                <div style={{padding:"10px 16px",background:sc4.bg,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:sc4.accent}}>📐 Tu ubicación en el plano</div>
-                  <div style={{fontSize:11,color:sc4.text,opacity:0.8}}>{SECTOR_NAMES[found.sector]}</div>
+                <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:`2px solid ${sc4.border}40`}}>
+                  <div style={{padding:"10px 16px",background:sc4.bg,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:sc4.accent}}>📐 Tu ubicación en el plano</div>
+                    <div style={{fontSize:11,color:sc4.text,opacity:0.8}}>{SECTOR_NAMES[found.sector]}</div>
+                  </div>
+                  <div style={{padding:10,overflowX:"auto"}}>
+                    <SectorMap sectorId={found.sector} records={records} onSpotClick={()=>{}} highlightId={found.id}/>
+                  </div>
+                  <div style={{padding:"6px 14px 10px",display:"flex",gap:14,flexWrap:"wrap",background:"#162032"}}>
+                    <Legend color="#facc15" label="Tu estacionamiento"/>
+                    <Legend color={sc4.spotOcc} label="Ocupado"/>
+                    <Legend color="#2d3f5a" label="Libre"/>
+                  </div>
                 </div>
-                <div style={{padding:10,overflowX:"auto"}}>
-                  <SectorMap sectorId={found.sector} records={records} onSpotClick={()=>{}} highlightId={found.id}/>
-                </div>
-                <div style={{padding:"6px 14px 10px",display:"flex",gap:14,flexWrap:"wrap",background:"#162032"}}>
-                  <Legend color="#facc15" label="Tu estacionamiento"/>
-                  <Legend color={sc4.spotOcc} label="Ocupado"/>
-                  <Legend color="#2d3f5a" label="Libre"/>
-                </div>
-              </div>
-              ;
+              </div>;
             })()}
           </div>
         )}
