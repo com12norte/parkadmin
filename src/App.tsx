@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // ── SUPABASE ──
 const SUPABASE_URL = "https://wfnzlwungqveojrvapiv.supabase.co";
@@ -1396,39 +1396,36 @@ export default function App() {
   const [staffAuth, setStaffAuth] = useState(false);
   const [records, setRecords] = useState({});
   const [loading, setLoading] = useState(true);
+  const loadedRef = useRef(false);
 
-  // Cargar registros desde Supabase al iniciar
   useEffect(() => {
+    if(loadedRef.current) return;
+    loadedRef.current = true;
     loadRegistros()
       .then(data => setRecords(data))
-      .catch(e => console.error("Error cargando registros:", e))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  // Wrapper para guardar en Supabase al actualizar records
-  const setRecordsAndSync = async (updater) => {
+  const setRecordsAndSync = useCallback((updater) => {
     setRecords(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      // Detectar cambios y sincronizar
       Object.entries(next).forEach(([id, rec]) => {
         if(JSON.stringify(prev[id]) !== JSON.stringify(rec)) {
-          upsertRegistro(Number(id), rec).catch(e => console.error("Error guardando:", e));
+          upsertRegistro(Number(id), rec);
         }
       });
-      // Detectar eliminaciones
       Object.keys(prev).forEach(id => {
-        if(!next[id]) {
-          deleteRegistro(Number(id)).catch(e => console.error("Error eliminando:", e));
-        }
+        if(!next[id]) deleteRegistro(Number(id));
       });
       return next;
     });
-  };
+  }, []);
 
   if(loading) return (
     <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <div style={{width:50,height:50,border:"3px solid #1e3a5f",borderTop:"3px solid #3b82f6",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
-      <div style={{color:"#4b5563",fontSize:13,fontFamily:"monospace"}}>Cargando registros...</div>
+      <div style={{color:"#4b5563",fontSize:13,fontFamily:"monospace"}}>Cargando...</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
