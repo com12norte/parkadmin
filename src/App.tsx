@@ -21,7 +21,39 @@ const deleteRegistro = async (id) => {
   catch(e){}
 };
 
-// ── SPOTS DATA ──
+// ── RECLAMOS (Supabase) ──
+const loadReclamos = async () => {
+  try { const res=await sbFetch("reclamos?select=*&order=created_at.desc"); const data=await res.json(); return Array.isArray(data)?data:[]; }
+  catch(e){ return []; }
+};
+const insertReclamo = async (reclamo) => {
+  try { const res=await sbFetch("reclamos",{method:"POST",body:JSON.stringify(reclamo)}); const data=await res.json(); return Array.isArray(data)?data[0]:data; }
+  catch(e){ return null; }
+};
+const updateReclamo = async (id,patch) => {
+  try { await sbFetch(`reclamos?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(patch)}); }
+  catch(e){}
+};
+
+// ── EMAILJS ──
+const EMAILJS_SERVICE = "service_vxhdrlx";
+const EMAILJS_TEMPLATE = "template_dgshb8a";
+const EMAILJS_KEY = "wKxD2rJHuftU7W-WE";
+
+const sendEmail = async (params) => {
+  try {
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        service_id: EMAILJS_SERVICE,
+        template_id: EMAILJS_TEMPLATE,
+        user_id: EMAILJS_KEY,
+        template_params: params,
+      }),
+    });
+  } catch(e) { console.error("Email error:",e); }
+};
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
   {id:41,torre:"1080",depto:"A1",sector:1,gx:1,gy:2},{id:46,torre:"1038",depto:"A1",sector:1,gx:1,gy:3},
@@ -65,7 +97,17 @@ const SC = {
   2:{bg:"#581c87",border:"#a855f7",spotOcc:"#7c3aed",accent:"#c084fc",text:"#e9d5ff"},
   3:{bg:"#9a3412",border:"#f97316",spotOcc:"#c2410c",accent:"#fb923c",text:"#fed7aa"},
 };
-const TORRES = ["1036","1038","1052","1054","1060","1061","1080","1081"];
+const TORRES_LABELS = {
+  "1052": "12 Norte 1052",
+  "1054": "12 Norte 1054",
+  "1036": "12 Norte 1036",
+  "1038": "12 Norte 1038",
+  "1061": "4 Oriente 1061",
+  "1081": "4 Oriente 1081",
+  "1060": "3 Oriente 1060",
+  "1080": "3 Oriente 1080",
+};
+const TORRES = ["1052","1054","1036","1038","1061","1081","1060","1080"];
 const DEPTOS_ALL = ["A1","B2","C3","D4","E5","E6","F5","F6","G7","H8"];
 
 const validarTelefono = (tel) => {
@@ -80,6 +122,7 @@ const validarTelefono = (tel) => {
 function emptyForm() {
   return {
     torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",
+    nombrePropietario:"",emailPropietario:"",telefonoPropietario:"",
     usoEstacionamiento:"",nombreCedido:"",emailCedido:"",telefonoCedido:"",docCedido:null,
     vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]
   };
@@ -95,15 +138,29 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
   const scm={1:{occ:'#14532d',acc:'#22c55e'},2:{occ:'#4c1d95',acc:'#a855f7'},3:{occ:'#7c2d12',acc:'#f97316'}};
 
   const spotEl=(id,x,y,w=SW,h=SH)=>{
-    const occ=!!records[id],hl=id===highlightId;
-    const sc=scm[SPOT_INFO[id]?.sector||sec];
-    const fill=hl?'#facc15':occ?sc.occ:'#1e2d45';
-    const stk=hl?'#fde047':occ?sc.acc:'#2d4060';
+    const rec=records[id];
+    const occ=!!rec,hl=id===highlightId;
+    // Color por uso
+    const usoColor={
+      uso_exclusivo:'#14532d',
+      visitas:'#1e3a5f',
+      ceder:'#4c1d95',
+      sin_uso:'#292524',
+    };
+    const usoAccent={
+      uso_exclusivo:'#22c55e',
+      visitas:'#3b82f6',
+      ceder:'#a855f7',
+      sin_uso:'#78716c',
+    };
+    const uso=rec?.usoEstacionamiento||'uso_exclusivo';
+    const fill=hl?'#facc15':occ?(usoColor[uso]||'#14532d'):'#1e2d45';
+    const stk=hl?'#fde047':occ?(usoAccent[uso]||'#22c55e'):'#2d4060';
     const nc=hl?'#0f172a':occ?'#fff':'#4a6080';
     const sc2=hl?'#1e3a5f':occ?'rgba(255,255,255,.6)':'#2d3f55';
     const inf=SPOT_INFO[id];
     const halo=hl?`<rect x="${x-3}" y="${y-3}" width="${w+6}" height="${h+6}" rx="7" fill="none" stroke="#facc15" stroke-width="2" opacity=".5"/>`:'';
-    const pat=occ&&records[id]?.patentes?.[0]?`<text x="${x+w/2}" y="${y-6}" text-anchor="middle" font-size="6" font-family="monospace" font-weight="700" fill="${sc.acc}">${records[id].patentes[0]}</text>`:'';
+    const pat=occ&&rec?.patentes?.[0]?`<text x="${x+w/2}" y="${y-6}" text-anchor="middle" font-size="6" font-family="monospace" font-weight="700" fill="${usoAccent[uso]||'#22c55e'}">${rec.patentes[0]}</text>`:'';
     return `${pat}<g style="cursor:pointer" data-id="${id}">
       <rect x="${x+1}" y="${y+2}" width="${w}" height="${h}" rx="4" fill="rgba(0,0,0,.28)"/>
       <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${fill}" stroke="${stk}" stroke-width="${hl?2.5:occ?1.5:1}"/>
@@ -255,10 +312,36 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
   const [propietario,setPropietario]=useState(record?.propietario||"");
   const [telefono,setTelefono]=useState(record?.telefono||"");
   const [vehiculo,setVehiculo]=useState(record?.vehiculo||"");
-  const save=()=>{const c=patentes.filter(p=>p.trim());onSave({patentes:c,propietario,telefono,vehiculo,updatedAt:new Date().toISOString()});};
+  const [historial,setHistorial]=useState([]);
+  const [showHist,setShowHist]=useState(false);
+  const [loadingHist,setLoadingHist]=useState(false);
+
+  const toggleHist=async()=>{
+    if(!showHist&&historial.length===0){
+      setLoadingHist(true);
+      const h=await loadHistorial(spot.id);
+      setHistorial(h);
+      setLoadingHist(false);
+    }
+    setShowHist(v=>!v);
+  };
+
+  const save=()=>{
+    const c=patentes.filter(p=>p.trim());
+    onSave({patentes:c,propietario,telefono,vehiculo,updatedAt:new Date().toISOString()});
+    addHistorial(spot.id,"Edición staff",`Patentes: ${c.join(", ")||"—"} · ${propietario||"sin nombre"}`);
+  };
+
+  const accionColor={
+    "Registro inicial":"#22c55e",
+    "Modificación":"#3b82f6",
+    "Edición staff":"#a855f7",
+    "Liberación":"#ef4444",
+  };
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#0f172a",border:`1.5px solid ${sc.accent}50`,borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.7)"}}>
+      <div style={{background:"#0f172a",border:`1.5px solid ${sc.accent}50`,borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.7)",maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{padding:"18px 20px 14px",background:sc.bg,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:sc.accent,textTransform:"uppercase",letterSpacing:1.5,marginBottom:4}}>{SECTOR_NAMES[spot.sector]}</div>
@@ -285,9 +368,33 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
               <input value={val} onChange={e=>setter(e.target.value)} placeholder={ph} style={{padding:"8px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",fontFamily:"inherit"}}/>
             </div>
           ))}
+
+          {/* Historial */}
+          <div>
+            <button onClick={toggleHist} style={{width:"100%",padding:"8px",borderRadius:8,border:"1px solid #1e3a5f",background:"transparent",color:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span>🕐 Historial de cambios</span>
+              <span>{showHist?"▲":"▼"}</span>
+            </button>
+            {showHist&&(
+              <div style={{marginTop:8,background:"#0a0f1e",borderRadius:8,padding:10,border:"1px solid #1e293b"}}>
+                {loadingHist&&<div style={{color:"#4b5563",fontSize:11,textAlign:"center",padding:8}}>Cargando...</div>}
+                {!loadingHist&&historial.length===0&&<div style={{color:"#4b5563",fontSize:11,textAlign:"center",padding:8}}>Sin historial registrado</div>}
+                {historial.map((h,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:8,paddingBottom:8,borderBottom:i<historial.length-1?"1px solid #1e293b":"none"}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:accionColor[h.accion]||"#64748b",marginTop:4,flexShrink:0}}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,fontWeight:700,color:accionColor[h.accion]||"#94a3b8"}}>{h.accion}</div>
+                      <div style={{fontSize:10,color:"#475569",marginTop:2}}>{h.detalle}</div>
+                      <div style={{fontSize:9,color:"#334155",marginTop:2}}>{h.created_at?new Date(h.created_at).toLocaleString("es-CL"):""}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div style={{padding:"0 20px 20px",display:"flex",gap:8,justifyContent:"space-between"}}>
-          <div>{record&&<button onClick={onDelete} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #7f1d1d",background:"#450a0a",color:"#f87171",fontWeight:700,fontSize:12,cursor:"pointer"}}>Liberar</button>}</div>
+          <div>{record&&<button onClick={()=>{addHistorial(spot.id,"Liberación",`Liberado por staff`);onDelete();}} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #7f1d1d",background:"#450a0a",color:"#f87171",fontWeight:700,fontSize:12,cursor:"pointer"}}>Liberar</button>}</div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={onClose} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #1e3a5f",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancelar</button>
             <button onClick={save} style={{padding:"9px 22px",borderRadius:9,border:"none",background:sc.accent,color:"#0f172a",fontWeight:900,fontSize:12,cursor:"pointer"}}>Guardar</button>
@@ -312,7 +419,160 @@ const ConfirmDialog = ({msg,onConfirm,onCancel}) => (
   </div>
 );
 
-// ── Login flag ──
+// ── ReclamoModal ──
+const ReclamoModal = ({spot,record,onClose,onSent}) => {
+  const [patenteIntrusa,setPatenteIntrusa]=useState("");
+  const [descripcion,setDescripcion]=useState("");
+  const [error,setError]=useState("");
+  const [sending,setSending]=useState(false);
+
+  const enviar=async()=>{
+    if(!descripcion.trim()){setError("Describe brevemente la situación");return;}
+    setSending(true);
+    const reclamo={
+      spot_id:spot.id,
+      torre:spot.torre,
+      depto:spot.depto,
+      sector:spot.sector,
+      nombre_residente:record?.nombre||record?.propietario||"—",
+      patente_intrusa:patenteIntrusa.trim().toUpperCase().replace(/[^A-Z0-9]/g,"")||null,
+      descripcion:descripcion.trim(),
+      estado:"pendiente",
+    };
+    await insertReclamo(reclamo);
+    sendEmail({
+      tipo:"Reclamo de ocupación indebida",
+      nombre:reclamo.nombre_residente,
+      torre:TORRES_LABELS[spot.torre]||spot.torre,
+      depto:spot.depto,
+      estac_id:spot.id,
+      sector:SECTOR_NAMES[spot.sector],
+      patente_intrusa:reclamo.patente_intrusa||"No especificada",
+      descripcion:reclamo.descripcion,
+      fecha:new Date().toLocaleString("es-CL"),
+    });
+    setSending(false);
+    onSent&&onSent();
+    onClose();
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16,backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"white",borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.5)",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{padding:"18px 20px",background:"#fef2f2",borderBottom:"1px solid #fecaca"}}>
+          <div style={{fontSize:16,fontWeight:800,color:"#b91c1c"}}>⚠️ Reportar ocupación indebida</div>
+          <div style={{fontSize:12,color:"#7f1d1d",marginTop:2}}>Estacionamiento #{spot.id} · Torre {spot.torre} · {spot.depto}</div>
+        </div>
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Patente del vehículo intruso <span style={{fontWeight:400,textTransform:"none",color:"#94a3b8"}}>(opcional)</span></label>
+            <input value={patenteIntrusa} onChange={e=>setPatenteIntrusa(e.target.value)} placeholder="Ej: ABCD12" maxLength={8}
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:15,fontWeight:800,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"monospace",letterSpacing:2,textTransform:"uppercase",boxSizing:"border-box"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Descripción <span style={{color:"#e53e3e"}}>*</span></label>
+            <textarea value={descripcion} onChange={e=>{setDescripcion(e.target.value);setError("");}} placeholder="Describe lo que está ocurriendo..." rows={4}
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${error?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+            {error&&<span style={{fontSize:10,color:"#e53e3e"}}>{error}</span>}
+          </div>
+        </div>
+        <div style={{padding:"0 20px 20px",display:"flex",gap:8}}>
+          <button onClick={onClose} style={{flex:1,padding:"11px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+          <button onClick={enviar} disabled={sending} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:sending?"#fca5a5":"#dc2626",color:"white",fontWeight:800,fontSize:13,cursor:sending?"default":"pointer"}}>{sending?"Enviando...":"Enviar reclamo"}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── ReclamosTab (staff) ──
+const ReclamosTab = () => {
+  const [reclamos2,setReclamos2]=useState([]);
+  const [loadingR,setLoadingR]=useState(true);
+  const [filtroEstado,setFiltroEstado]=useState("pendiente");
+
+  const refresh=()=>{setLoadingR(true);loadReclamos().then(d=>{setReclamos2(d);setLoadingR(false);});};
+
+  useEffect(()=>{refresh();},[]);
+
+  const estadoColor={pendiente:"#f59e0b",atendido:"#22c55e",descartado:"#6b7280"};
+  const estadoLabel={pendiente:"Pendiente",atendido:"Atendido",descartado:"Descartado"};
+
+  const marcar=async(id,estado)=>{
+    await updateReclamo(id,{estado});
+    setReclamos2(prev=>prev.map(x=>x.id===id?{...x,estado}:x));
+  };
+
+  const listados=filtroEstado==="todos"?reclamos2:reclamos2.filter(r=>r.estado===filtroEstado);
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      <div style={{fontSize:13,fontWeight:700,color:"white"}}>⚠️ Reclamos de residentes</div>
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}
+          style={{padding:"6px 8px",borderRadius:7,fontSize:11,border:"1px solid #1f2937",background:"#0a0f1e",color:"white",cursor:"pointer"}}>
+          <option value="todos">Todos</option>
+          <option value="pendiente">Pendientes</option>
+          <option value="atendido">Atendidos</option>
+          <option value="descartado">Descartados</option>
+        </select>
+        <button onClick={refresh} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #1f2937",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>↺ Actualizar</button>
+      </div>
+    </div>
+    {loadingR&&<div style={{textAlign:"center",padding:32,color:"#4b5563"}}>Cargando...</div>}
+    {!loadingR&&listados.length===0&&(
+      <div style={{textAlign:"center",padding:32,background:"#111827",borderRadius:12,border:"1px solid #1f2937"}}>
+        <div style={{fontSize:32,marginBottom:8}}>✅</div>
+        <div style={{color:"#4b5563",fontSize:13}}>No hay reclamos {filtroEstado!=="todos"?estadoLabel[filtroEstado]?.toLowerCase():""}</div>
+      </div>
+    )}
+    {listados.map(r=>(
+      <div key={r.id} style={{background:"#111827",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${estadoColor[r.estado]||"#1f2937"}30`,borderLeft:`3px solid ${estadoColor[r.estado]||"#1f2937"}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"white"}}>Estac. #{r.spot_id} · {TORRES_LABELS[r.torre]||r.torre} {r.depto}</div>
+            <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{r.nombre_residente} · {r.created_at?new Date(r.created_at).toLocaleString("es-CL"):""}</div>
+          </div>
+          <div style={{padding:"3px 8px",borderRadius:6,background:(estadoColor[r.estado]||"#6b7280")+"20",border:`1px solid ${estadoColor[r.estado]||"#6b7280"}50`,fontSize:10,fontWeight:700,color:estadoColor[r.estado]||"#6b7280",whiteSpace:"nowrap"}}>
+            {estadoLabel[r.estado]||r.estado}
+          </div>
+        </div>
+        {r.patente_intrusa&&<div style={{fontSize:11,color:"#f87171",marginBottom:6}}>🚗 Patente intrusa: <strong style={{fontFamily:"monospace",letterSpacing:1}}>{r.patente_intrusa}</strong></div>}
+        <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,marginBottom:10}}>{r.descripcion}</div>
+        <div style={{display:"flex",gap:6}}>
+          {r.estado==="pendiente"&&<>
+            <button onClick={()=>marcar(r.id,"atendido")}
+              style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #22c55e",background:"rgba(34,197,94,.1)",color:"#22c55e",fontSize:11,fontWeight:700,cursor:"pointer"}}>✅ Marcar atendido</button>
+            <button onClick={()=>marcar(r.id,"descartado")}
+              style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #6b7280",background:"rgba(107,114,128,.1)",color:"#6b7280",fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Descartar</button>
+          </>}
+          {r.estado!=="pendiente"&&<div style={{fontSize:11,color:"#334155"}}>Resuelto</div>}
+        </div>
+      </div>
+    ))}
+  </div>;
+};
+
+// ── INACTIVIDAD ──
+const INACTIVITY_MINUTES = 15;
+
+const useInactivity = (onTimeout) => {
+  const timer = useRef(null);
+  const reset = useCallback(() => {
+    if(timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(onTimeout, INACTIVITY_MINUTES * 60 * 1000);
+  }, [onTimeout]);
+
+  useEffect(() => {
+    const events = ["mousemove","keydown","click","scroll","touchstart"];
+    events.forEach(e => window.addEventListener(e, reset));
+    reset();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, reset));
+      if(timer.current) clearTimeout(timer.current);
+    };
+  }, [reset]);
+};
 let loginInProgress = false;
 
 // ── STAFF LOGIN ──
@@ -408,13 +668,21 @@ const HomeScreen = ({onGo}) => {
 };
 
 // ── QUERY TAB ──
-const QueryTab = ({records}) => {
+const QueryTab = ({records, reportMode=false, onReportDone}) => {
   const [mode,setMode]=useState("patente");
   const [queryPat,setQueryPat]=useState("");
   const [queryTorre,setQueryTorre]=useState("");
   const [queryDepto,setQueryDepto]=useState("");
   const [result,setResult]=useState(null);
+  const [reclamo,setReclamo]=useState(null);
+  const [toast,setToast]=useState(null);
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);};
   const deptosFiltrados=queryTorre?DEPTOS_ALL.filter(d=>BY_TD[`${queryTorre}-${d}`]):[];
+
+  // Auto-open reclamo modal when found in reportMode
+  const openReclamo=(spot,record)=>{
+    setReclamo({spot,record});
+  };
 
   const buscarPatente=()=>{
     if(!queryPat.trim())return;
@@ -423,16 +691,124 @@ const QueryTab = ({records}) => {
     for(const s of SPOTS_DATA){const rec=records[s.id];if(rec?.patentes?.some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q)){res={spot:s,record:rec};break;}}
     setResult(res||"not_found");
   };
-  const buscarDireccion=()=>{
-    if(!queryTorre||!queryDepto)return;
-    const spot=BY_TD[`${queryTorre}-${queryDepto}`];
+  const buscarDireccion=(torreOverride,deptoOverride)=>{
+    const t=torreOverride||queryTorre,d=deptoOverride||queryDepto;
+    if(!t||!d)return;
+    const spot=BY_TD[`${t}-${d}`];
     if(!spot){setResult("not_found");return;}
     const rec=records[spot.id];
     if(!rec){setResult({spot,notReg:true});return;}
-    setResult({spot,record:rec});
+    const res={spot,record:rec};
+    setResult(res);
+    if(reportMode) openReclamo(spot,rec);
   };
   const reset=()=>{setResult(null);setQueryPat("");setQueryTorre("");setQueryDepto("");};
 
+  const [notified,setNotified]=useState(false);
+  const buscarReporte=()=>{
+    if(!queryPat.trim())return;
+    const q=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
+    let res=null;
+    for(const s of SPOTS_DATA){const rec=records[s.id];if(rec?.patentes?.some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q)){res={spot:s,record:rec};break;}}
+    if(res){setResult(res);}
+    else{setResult("not_found");}
+  };
+  const notificarAdmin=()=>{
+    sendEmail({
+      tipo:"Patente no registrada - Posible ocupación indebida",
+      patente:queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,""),
+      fecha:new Date().toLocaleString("es-CL"),
+      mensaje:"Un residente reportó ocupación indebida pero su patente no está registrada en el sistema.",
+    });
+    setNotified(true);
+    showToast("Administración notificada","info");
+  };
+
+  // ── REPORT MODE: patente-first flow ──
+  if(reportMode){
+    return (
+      <div>
+        <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",gap:12,alignItems:"flex-start"}}>
+          <span style={{fontSize:22,flexShrink:0}}>⚠️</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:2}}>Reportar ocupación indebida</div>
+            <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>Ingresa tu patente para identificar tu estacionamiento y enviar el reclamo.</div>
+          </div>
+        </div>
+
+        {!result&&(
+          <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Tu patente <span style={{color:"#e53e3e"}}>*</span></label>
+            <div style={{display:"flex",gap:10}}>
+              <input value={queryPat} onChange={e=>{setQueryPat(e.target.value);setResult(null);setNotified(false);}} onKeyDown={e=>e.key==="Enter"&&buscarReporte()} placeholder="ABCD12" maxLength={8}
+                style={{flex:1,padding:"14px 16px",borderRadius:10,fontSize:20,fontWeight:900,border:"2px solid #fecaca",background:"#fff5f5",color:"#0f172a",outline:"none",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:3}}/>
+              <button onClick={buscarReporte}
+                style={{padding:"14px 20px",borderRadius:10,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Buscar</button>
+            </div>
+          </div>
+        )}
+
+        {result==="not_found"&&!notified&&(
+          <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:36,marginBottom:8}}>❓</div>
+              <div style={{fontSize:15,fontWeight:800,color:"#0f172a",marginBottom:4}}>Patente no registrada</div>
+              <div style={{fontSize:12,color:"#64748b",lineHeight:1.5,marginBottom:4}}>La patente <strong style={{fontFamily:"monospace",letterSpacing:1}}>{queryPat.toUpperCase()}</strong> no está en el sistema.</div>
+              <div style={{fontSize:12,color:"#64748b",lineHeight:1.5}}>¿Igualmente hay un vehículo no autorizado en tu estacionamiento? Podemos notificar a administración.</div>
+            </div>
+            <button onClick={notificarAdmin}
+              style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8}}>
+              📢 Notificar a administración
+            </button>
+            <button onClick={()=>{setResult(null);setQueryPat("");setNotified(false);}}
+              style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+              ← Intentar con otra patente
+            </button>
+          </div>
+        )}
+
+        {result==="not_found"&&notified&&(
+          <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:16,padding:28,textAlign:"center"}}>
+            <div style={{fontSize:36,marginBottom:8}}>✅</div>
+            <div style={{fontSize:15,fontWeight:800,color:"#166534",marginBottom:6}}>Administración notificada</div>
+            <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>El equipo de administración fue alertado y revisará la situación a la brevedad.</div>
+            <button onClick={()=>{onReportDone&&onReportDone();}} style={{marginTop:16,padding:"10px 24px",borderRadius:9,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Volver al inicio</button>
+          </div>
+        )}
+
+        {result&&result!=="not_found"&&(()=>{
+          const {spot,record}=result,sc5=SC[spot.sector];
+          return <div>
+            <div style={{background:sc5.bg,borderRadius:16,overflow:"hidden",marginBottom:14,boxShadow:"0 4px 16px rgba(0,0,0,.15)"}}>
+              <div style={{padding:"16px 20px",background:"rgba(255,255,255,.08)",borderBottom:"1px solid rgba(255,255,255,.1)",display:"flex",alignItems:"center",gap:12}}>
+                <div style={{fontSize:32}}>✅</div>
+                <div>
+                  <div style={{fontSize:10,color:sc5.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>Estacionamiento encontrado</div>
+                  <div style={{fontSize:20,fontWeight:900,fontFamily:"monospace",color:"white"}}>#{spot.id}</div>
+                </div>
+              </div>
+              <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+                <RowItem icon="📍" label="Sector" value={SECTOR_NAMES[spot.sector]}/>
+                <RowItem icon="🏢" label="Torre" value={TORRES_LABELS[spot.torre]||spot.torre}/>
+                <RowItem icon="🏠" label="Departamento" value={spot.depto}/>
+                <RowItem icon="👤" label="Registrado a nombre de" value={record.nombre||"—"}/>
+              </div>
+            </div>
+            <button onClick={()=>openReclamo(spot,record)}
+              style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(220,38,38,.4)"}}>
+              ⚠️ Reportar ocupación indebida
+            </button>
+            <button onClick={()=>{setResult(null);setQueryPat("");}} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Buscar otra patente</button>
+          </div>;
+        })()}
+
+        {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>{setReclamo(null);reset();}} onSent={()=>{showToast("Reclamo enviado a administración","info");setTimeout(()=>onReportDone&&onReportDone(),1800);}}/>}
+        {toast&&<Toast msg={toast.msg} type={toast.type}/>}
+      </div>
+    );
+  }
+
+  // ── NORMAL QUERY MODE ──
   return (
     <div>
       <div style={{display:"flex",gap:2,background:"#dde3ed",borderRadius:10,padding:3,marginBottom:16}}>
@@ -459,14 +835,14 @@ const QueryTab = ({records}) => {
             <select value={queryTorre} onChange={e=>{setQueryTorre(e.target.value);setQueryDepto("");setResult(null);}}
               style={{width:"100%",padding:"11px 12px",borderRadius:9,fontSize:14,fontWeight:600,border:"1.5px solid #e2e8f0",background:"white",outline:"none",cursor:"pointer",fontFamily:"monospace"}}>
               <option value="">— Selecciona la dirección —</option>
-              {TORRES.map(t=><option key={t} value={t}>12 Norte {t}</option>)}
+              {TORRES.map(t=><option key={t} value={t}>{TORRES_LABELS[t]}</option>)}
             </select>
             <select value={queryDepto} onChange={e=>{setQueryDepto(e.target.value);setResult(null);}} disabled={!queryTorre}
               style={{width:"100%",padding:"11px 12px",borderRadius:9,fontSize:14,fontWeight:600,border:"1.5px solid #e2e8f0",background:queryTorre?"white":"#f8fafc",outline:"none",cursor:queryTorre?"pointer":"not-allowed",fontFamily:"monospace"}}>
               <option value="">— Selecciona letra/block —</option>
               {deptosFiltrados.map(d=><option key={d} value={d}>{d}</option>)}
             </select>
-            <button onClick={buscarDireccion} disabled={!queryTorre||!queryDepto}
+            <button onClick={()=>buscarDireccion()} disabled={!queryTorre||!queryDepto}
               style={{padding:"12px",borderRadius:10,border:"none",background:queryTorre&&queryDepto?"#2563eb":"#cbd5e1",color:"white",fontWeight:800,fontSize:14,cursor:queryTorre&&queryDepto?"pointer":"not-allowed"}}>
               Ver Estacionamiento
             </button>
@@ -535,14 +911,22 @@ const QueryTab = ({records}) => {
             </div>
           </div>
           <button onClick={reset} style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:700,fontSize:13,cursor:"pointer"}}>Nueva búsqueda</button>
+          <button onClick={()=>setReclamo({spot,record})}
+            style={{width:"100%",marginTop:8,padding:"11px",borderRadius:10,border:"1.5px solid #ef4444",background:"#fff5f5",color:"#dc2626",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+            ⚠️ Reportar ocupación indebida
+          </button>
         </div>;
       })()}
+      {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>setReclamo(null)} onSent={()=>showToast("Reclamo enviado a administración","info")}/>}
+      {toast&&<Toast msg={toast.msg} type={toast.type}/>}
     </div>
   );
 };
 
 // ── RESIDENT ──
 const ResidentScreen = ({records,setRecords,onBack}) => {
+  const [entered,setEntered]=useState(false);
+  const [reportMode,setReportMode]=useState(false);
   const [tab,setTab]=useState("form");
   const [toast,setToast]=useState(null);
   const [form,setFormState]=useState(emptyForm());
@@ -551,8 +935,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   const [errors,setErrors]=useState({});
   const [emailInput,setEmailInput]=useState("");
   const [isEditing,setIsEditing]=useState(false);
+  const [reglamentoExpanded,setReglamentoExpanded]=useState(false);
+  const [aceptaReglamento,setAceptaReglamento]=useState(false);
+
+  const [reclamo,setReclamo]=useState(null); // {spot, record}
 
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);};
+
   const setF=(k,v)=>{setFormState(f=>({...f,[k]:v}));setErrors(e=>({...e,[k]:""}));};
 
   const handleLookup=()=>{
@@ -572,7 +961,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     const entered=emailInput.trim().toLowerCase();
     if(!entered){setErrors({emailVerify:"Ingresa tu correo"});return;}
     if(stored!==entered){setErrors({emailVerify:"El correo no coincide. Contacta a administración."});return;}
-    setFormState(f=>({...f,nombre:rec?.nombre||"",email:rec?.email||"",telefono:rec?.telefono||"",tipoResidente:rec?.tipoResidente||"",usoEstacionamiento:rec?.usoEstacionamiento||"",vehiculos:rec?.vehiculos?.length?rec.vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
+    setFormState(f=>({...f,nombre:rec?.nombre||"",email:rec?.email||"",telefono:rec?.telefono||"",tipoResidente:rec?.tipoResidente||"",usoEstacionamiento:rec?.usoEstacionamiento||"",nombrePropietario:rec?.nombrePropietario||"",emailPropietario:rec?.emailPropietario||"",telefonoPropietario:rec?.telefonoPropietario||"",vehiculos:rec?.vehiculos?.length?rec.vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
     setErrors({});setStep(1);
   };
 
@@ -582,6 +971,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       if(!form.nombre.trim())e.nombre="Requerido";
       if(!form.tipoResidente)e.tipoResidente="Selecciona una opción";
       if(form.telefono){const err=validarTelefono(form.telefono);if(err)e.telefono=err;}
+      if(form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo"){
+        if(!form.nombrePropietario?.trim())e.nombrePropietario="Requerido";
+        if(!form.emailPropietario?.trim())e.emailPropietario="Requerido";
+        if(!form.telefonoPropietario?.trim())e.telefonoPropietario="Requerido";
+        else{const err=validarTelefono(form.telefonoPropietario);if(err)e.telefonoPropietario=err;}
+      }
     }
     if(s===2){
       if(!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
@@ -593,7 +988,10 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
         if(!form.docCedido)e.docCedido="Debes adjuntar el documento de autorización";
       }
     }
-    if(s===3)form.vehiculos.forEach((v,i)=>{if(!v.patente.trim())e[`pat_${i}`]="Ingresa la patente";});
+    if(s===3){
+      form.vehiculos.forEach((v,i)=>{if(!v.patente.trim())e[`pat_${i}`]="Ingresa la patente";});
+      if(!aceptaReglamento)e.reglamento="Debes aceptar el Reglamento de Copropiedad para continuar";
+    }
     return e;
   };
 
@@ -613,13 +1011,34 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
       ...(form.usoEstacionamiento==="ceder"?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||""}:{}),
+      ...(form.tipoResidente==="arrendatario"?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
       updatedAt:new Date().toISOString()
     };
     setRecords(r=>({...r,[found.id]:data}));
+    const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
+    const emailParams={
+      nombre:form.nombre,
+      torre:TORRES_LABELS[found.torre]||found.torre,
+      depto:found.depto,
+      estac_id:found.id,
+      patentes:veh.map(v=>v.patente).join(", ")||"—",
+      telefono:form.telefono||"—",
+      uso:usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
+      fecha:new Date().toLocaleString("es-CL"),
+      sector:SECTOR_NAMES[found.sector],
+      email_residente:form.email||"",
+      ...(form.tipoResidente==="arrendatario"?{nombre_propietario:form.nombrePropietario||"",email_propietario:form.emailPropietario||"",telefono_propietario:form.telefonoPropietario||""}:{}),
+    };
+    sendEmail({...emailParams});
+    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()});
+    // Historial
+    addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
+      `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
+    );
     setStep(4);showToast("Registro guardado correctamente");
   };
 
-  const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");};
+  const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");setAceptaReglamento(false);setReglamentoExpanded(false);};
   const addVehiculo=()=>{if(form.vehiculos.length<5)setFormState(f=>({...f,vehiculos:[...f.vehiculos,{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));};
   const updateVeh=(i,k,v)=>{setFormState(f=>({...f,vehiculos:f.vehiculos.map((x,j)=>j===i?{...x,[k]:k==="patente"?v.toUpperCase():v}:x)}));setErrors(e=>({...e,[`pat_${i}`]:""}));};
   const removeVeh=i=>setFormState(f=>({...f,vehiculos:f.vehiculos.filter((_,j)=>j!==i)}));
@@ -638,12 +1057,40 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     </label>
   );
 
+  if(!entered){
+    return (
+      <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"system-ui,sans-serif"}}>
+        <div style={{width:"100%",maxWidth:420}}>
+          <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600,marginBottom:24}}>← Volver</button>
+          <div style={{fontSize:22,fontWeight:900,color:"white",marginBottom:4}}>🏠 Mi Estacionamiento</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,.75)",marginBottom:24}}>¿Qué deseas hacer?</div>
+          <button onClick={()=>{setTab("form");setReportMode(false);setEntered(true);}}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"18px 20px",borderRadius:16,border:"none",cursor:"pointer",background:"white",marginBottom:12,textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,.2)"}}>
+            <span style={{fontSize:28}}>📝</span>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:"#0f172a"}}>Registro o modificación</div>
+              <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Registra tus patentes o actualiza tus datos</div>
+            </div>
+          </button>
+          <button onClick={()=>{setTab("query");setReportMode(true);setEntered(true);}}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"18px 20px",borderRadius:16,border:"none",cursor:"pointer",background:"#fff5f5",textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,.2)"}}>
+            <span style={{fontSize:28}}>⚠️</span>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:"#dc2626"}}>Reportar ocupación indebida</div>
+              <div style={{fontSize:12,color:"#b91c1c",marginTop:2}}>Un vehículo está en tu estacionamiento sin autorización</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{minHeight:"100vh",background:"#eef2f7",fontFamily:"system-ui,sans-serif"}}>
       <div style={{background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",padding:"16px 20px 0",boxShadow:"0 6px 24px rgba(37,99,235,.4)",position:"sticky",top:0,zIndex:50}}>
         <div style={{maxWidth:640,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-            <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600}}>←</button>
+            <button onClick={()=>setEntered(false)} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600}}>←</button>
             <div style={{flex:1}}>
               <div style={{fontSize:10,fontWeight:600,opacity:0.7,textTransform:"uppercase",letterSpacing:1}}>Residente</div>
               <div style={{fontSize:20,fontWeight:900,letterSpacing:-0.4}}>🏠 Mi Estacionamiento</div>
@@ -687,7 +1134,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                     <select value={form.torre} onChange={e=>{setF("torre",e.target.value);setF("depto","");}}
                       style={{width:"100%",padding:"11px 12px",borderRadius:9,fontSize:14,fontWeight:600,border:"1.5px solid #e2e8f0",background:"white",outline:"none",cursor:"pointer",fontFamily:"monospace"}}>
                       <option value="">— Selecciona la dirección —</option>
-                      {TORRES.map(t=><option key={t} value={t}>12 Norte {t}</option>)}
+                      {TORRES.map(t=><option key={t} value={t}>{TORRES_LABELS[t]}</option>)}
                     </select>
                   </div>
                   <div>
@@ -757,6 +1204,28 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                     {radioBtn("tipoResidente","propietario_arriendo","Propietario no residente (arrienda)")}
                     {radioBtn("tipoResidente","arrendatario","Arrendatario / Ocupante")}
                   </div>
+                  {(form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")&&(
+                    <div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:16}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"#92400e",marginBottom:2}}>
+                        {form.tipoResidente==="arrendatario"?"👤 Datos del propietario (dueño de la unidad)":"👤 Datos de contacto del arrendatario"}
+                      </div>
+                      <div style={{fontSize:11,color:"#b45309",marginBottom:12,lineHeight:1.5}}>
+                        {form.tipoResidente==="arrendatario"
+                          ?"Como arrendatario u ocupante, debes indicar los datos del dueño de la propiedad."
+                          :"Como propietario no residente, ingresa los datos de quien ocupa la unidad."}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {[["nombrePropietario","Nombre completo","Nombre y apellido","text"],["emailPropietario","Correo electrónico","correo@ejemplo.com","email"],["telefonoPropietario","Teléfono","+56 9 ...","tel"]].map(([k,lbl,ph,type])=>(
+                          <div key={k}>
+                            <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
+                            <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
+                              style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#fde68a"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                            {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false],["telefono","6. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
@@ -883,6 +1352,47 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                   </div>
                 ))}
                 {form.vehiculos.length<5&&<button onClick={addVehiculo} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed #2563eb",background:"#eff6ff",color:"#2563eb",cursor:"pointer",fontSize:13,fontWeight:600,marginBottom:4}}>+ Agregar otro vehículo</button>}
+
+                <div style={{background:"#f8fafc",borderRadius:12,border:`1.5px solid ${errors.reglamento?"#e53e3e":"#e2e8f0"}`,overflow:"hidden",marginTop:16}}>
+                  <div style={{padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:"#0f172a"}}>📋 Reglamento de Copropiedad</div>
+                    <button onClick={()=>setReglamentoExpanded(v=>!v)} style={{background:"none",border:"none",color:"#2563eb",fontSize:11,fontWeight:700,cursor:"pointer",padding:"2px 8px",borderRadius:6,background:"#eff6ff"}}>
+                      {reglamentoExpanded?"▲ Cerrar":"▼ Leer reglamento"}
+                    </button>
+                  </div>
+                  {reglamentoExpanded&&(
+                    <div style={{padding:"14px 16px",maxHeight:260,overflowY:"auto",fontSize:11,color:"#374151",lineHeight:1.7,background:"white"}}>
+                      <p style={{margin:"0 0 10px",fontWeight:700,color:"#0f172a"}}>Artículo 23 — Reglamento de Copropiedad</p>
+                      <p style={{margin:"0 0 10px"}}>Cada copropietario podrá solicitar una porción del espacio común como estacionamiento, para que sea utilizado por el residente (dueño, ocupante y/o arrendatario) con el único objeto de estacionar un automóvil y/o vehículo similar en dicho espacio asignado, el cual deberá ser respetado por los demás comuneros. Esta asignación está señalada en el reglamento interno. Los espacios asignados para uso de estacionamiento constituyen meramente asignaciones de uso de una porción de espacio común, razón por la que no forma parte del dominio singular que cada comunero tiene respecto de su departamento. Por tanto, los comuneros no pueden vender, ceder, enajenar, arrendar, subarrendar o prometer servicio alguno en ellos ya sea de forma directa o indirecta mediante corredores de propiedades o sus arrendatarios.</p>
+                      <p style={{margin:"0 0 10px"}}>Será responsabilidad de cada comunero hacer uso de forma responsable del espacio asignado como estacionamiento, respetando la demarcación respectiva de forma tal que no impida el correcto estacionamiento de los demás comuneros. Asimismo, corresponderá a cada comunero no permitir que terceros le priven y/o perturben su derecho de uso del espacio asignado, debiendo en primera instancia, buscar personalmente la forma de resolver con el comunero que esté ocupando indebidamente su estacionamiento. En caso de que definitivamente no se pudo arribar a una solución directa, el comunero afectado deberá efectuar la denuncia y remitir los antecedentes respectivos a la Administración, para efectos de aplicar multas y ejercer las acciones legales pertinentes.</p>
+                      <p style={{margin:"0 0 6px",fontWeight:700,color:"#0f172a"}}>Normas de uso:</p>
+                      <p style={{margin:"0 0 6px"}}>a) Cada propietario tiene derecho a un estacionamiento.</p>
+                      <p style={{margin:"0 0 6px"}}>b) Se permite prestar el espacio a otros residentes, siempre informando a la administración mediante declaración simple. Es necesario contar con el registro de copropietario al día.</p>
+                      <p style={{margin:"0 0 6px"}}>c) Es obligatorio registrar la patente del vehículo asignado. Cualquier modificación debe ser comunicada a la administración.</p>
+                      <p style={{margin:"0 0 6px"}}>d) El estacionamiento no puede ser arrendado ni entregado en uso y goce a personas no residentes en el edificio.</p>
+                      <p style={{margin:"0 0 6px"}}>e) Se permite estacionar vehículos externos que concurran de visita. El incumplimiento se sancionará con multa categorizada como grave.</p>
+                      <p style={{margin:"0 0 10px",fontWeight:700,color:"#0f172a",marginTop:10}}>Reglamento Interno — Normas adicionales:</p>
+                      <p style={{margin:"0 0 6px"}}>• Solo se permiten motocicletas, automóviles y camionetas (máx. 5.25m largo × 1.85m ancho).</p>
+                      <p style={{margin:"0 0 6px"}}>• Velocidad máxima de circulación: 15 km/hr.</p>
+                      <p style={{margin:"0 0 6px"}}>• Los vehículos deben estacionarse aculatados (parte trasera al interior).</p>
+                      <p style={{margin:"0 0 6px"}}>• Prohibido estacionar en pistas de circulación bajo cualquier circunstancia.</p>
+                      <p style={{margin:"0 0 6px"}}>• Prohibido cerrar espacios o dejar objetos en ellos (bicicletas, neumáticos, etc.).</p>
+                      <p style={{margin:"0 0 6px"}}>• Prohibido el lavado de vehículos con agua y jabón, trabajos de mecánica mayor, y acopio de escombros o basuras.</p>
+                      <p style={{margin:"0 0 6px"}}>• Está prohibido estacionar o tener vehículos abandonados. El incumplimiento será sancionado con multa grave por cada día.</p>
+                      <p style={{margin:"0 0 0px"}}>• En caso de estacionar en lugar no designado o infringir las normas, la Administración podrá aplicar traba ruedas hasta el pago de la multa correspondiente.</p>
+                    </div>
+                  )}
+                  <div style={{padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10,background:aceptaReglamento?"#f0fdf4":"white",transition:"background .2s"}}>
+                    <div onClick={()=>setAceptaReglamento(v=>!v)} style={{width:20,height:20,borderRadius:5,border:`2px solid ${aceptaReglamento?"#16a34a":errors.reglamento?"#e53e3e":"#cbd5e1"}`,background:aceptaReglamento?"#16a34a":"white",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:1}}>
+                      {aceptaReglamento&&<span style={{color:"white",fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
+                    </div>
+                    <label onClick={()=>setAceptaReglamento(v=>!v)} style={{fontSize:12,color:"#374151",lineHeight:1.5,cursor:"pointer"}}>
+                      He leído y acepto el <strong>Reglamento de Copropiedad</strong> y el <strong>Reglamento Interno</strong> respecto al uso de estacionamientos. Entiendo que el incumplimiento puede derivar en multas y acciones legales.
+                    </label>
+                  </div>
+                  {errors.reglamento&&<div style={{padding:"6px 16px 10px",fontSize:11,color:"#e53e3e"}}>{errors.reglamento}</div>}
+                </div>
+
                 <div style={{display:"flex",gap:10,marginTop:16}}>
                   <button onClick={()=>setStep(2)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
                   <button onClick={next} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:"#16a34a",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>✅ Enviar Registro</button>
@@ -908,8 +1418,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       <SummaryRow label="Tipo" value={tipoL[form.tipoResidente]||form.tipoResidente}/>
                       <SummaryRow label="Vehículos" value={form.vehiculos.filter(v=>v.patente).map(v=>v.patente).join(", ")||"—"}/>
                       <SummaryRow label="Uso" value={usoL[form.usoEstacionamiento]||"—"}/>
+                      {form.tipoResidente==="arrendatario"&&<SummaryRow label="Propietario" value={form.nombrePropietario||"—"}/>}
                     </div>
                     <button onClick={resetForm} style={{width:"100%",padding:"12px",borderRadius:9,border:"1.5px solid #2563eb",background:"white",color:"#2563eb",fontWeight:700,fontSize:13,cursor:"pointer"}}>Registrar otra unidad</button>
+                    <button onClick={()=>setReclamo({spot:found,record:records[found.id]})}
+                      style={{width:"100%",marginTop:8,padding:"12px",borderRadius:9,border:"1.5px solid #ef4444",background:"#fff5f5",color:"#dc2626",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                      ⚠️ Reportar ocupación indebida
+                    </button>
                   </div>
                 </div>
                 <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:`2px solid ${sc4.accent}40`}}>
@@ -930,8 +1445,9 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
             })()}
           </div>
         )}
-        {tab==="query"&&<QueryTab records={records}/>}
+        {tab==="query"&&<QueryTab records={records} reportMode={reportMode} onReportDone={()=>setEntered(false)}/>}
       </div>
+      {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>setReclamo(null)} onSent={()=>showToast("Reclamo enviado a administración","info")}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type}/>}
     </div>
   );
@@ -948,8 +1464,30 @@ const StaffScreen = ({records,setRecords,onBack}) => {
   const [filterSector,setFilterSector]=useState("all");
   const [sortBy,setSortBy]=useState("id");
   const [confirmDelete,setConfirmDelete]=useState(null);
+  const [warningVisible,setWarningVisible]=useState(false);
+  const warningTimer=useRef(null);
 
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2600);};
+
+  // Cierre por inactividad
+  const handleTimeout=useCallback(()=>{
+    showToast("Sesión cerrada por inactividad","info");
+    setTimeout(()=>onBack(),1500);
+  },[onBack]);
+
+  // Aviso 2 min antes
+  const handleWarning=useCallback(()=>{
+    setWarningVisible(true);
+    warningTimer.current=setTimeout(()=>setWarningVisible(false),10000);
+  },[]);
+
+  useInactivity(handleTimeout);
+
+  // Aviso a los 13 minutos
+  useEffect(()=>{
+    const t=setTimeout(handleWarning,(INACTIVITY_MINUTES-2)*60*1000);
+    return()=>clearTimeout(t);
+  },[handleWarning]);;
 
   const verify=()=>{
     if(!query.trim())return;
@@ -983,6 +1521,16 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 
   return (
     <div style={{minHeight:"100vh",background:"#0a0f1e",fontFamily:"system-ui,sans-serif",color:"white"}}>
+      {/* Aviso inactividad */}
+      {warningVisible&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:500,background:"#854d0e",padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#fef08a"}}>⚠️ Tu sesión se cerrará en 2 minutos por inactividad</span>
+          <button onClick={()=>{setWarningVisible(false);if(warningTimer.current)clearTimeout(warningTimer.current);}}
+            style={{padding:"4px 12px",borderRadius:6,border:"1px solid #fef08a",background:"transparent",color:"#fef08a",fontSize:12,cursor:"pointer",fontWeight:700}}>
+            Continuar sesión
+          </button>
+        </div>
+      )}
       <div style={{background:"#111827",borderBottom:"1px solid #1f2937",padding:"14px 20px",position:"sticky",top:0,zIndex:50}}>
         <div style={{maxWidth:760,margin:"0 auto",display:"flex",alignItems:"center",gap:12}}>
           <button onClick={onBack} style={{background:"#0a0f1e",border:"none",color:"#64748b",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16}}>←</button>
@@ -997,7 +1545,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         </div>
         <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#0a0f1e",borderRadius:10,padding:3}}>
-          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"]].map(([k,icon,label])=>(
+          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"]].map(([k,icon,label])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:tab===k?"#2563eb":"transparent",color:tab===k?"white":"#4b5563",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
               <span>{icon}</span><span>{label}</span>
             </button>
@@ -1068,6 +1616,35 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                 <option value="id">N° Estac.</option><option value="torre">Torre</option>
                 <option value="depto">Depto</option><option value="sector">Sector</option>
               </select>
+              <button onClick={()=>{
+                const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cedido",sin_uso:"Sin uso"};
+                const tipoL={propietario_residente:"Prop. residente",propietario_arriendo:"Prop. no residente",arrendatario:"Arrendatario"};
+                const rows=[["Estac.","Torre","Depto","Sector","Nombre","Email","Teléfono","Tipo","Uso","Patentes","Actualizado"]];
+                listedSpots.forEach(s=>{
+                  const r=records[s.id];
+                  rows.push([
+                    `#${s.id}`,
+                    TORRES_LABELS[s.torre]||s.torre,
+                    s.depto,
+                    SECTOR_NAMES[s.sector],
+                    r.nombre||"",
+                    r.email||"",
+                    r.telefono||"",
+                    tipoL[r.tipoResidente]||r.tipoResidente||"",
+                    usoL[r.usoEstacionamiento]||r.usoEstacionamiento||"",
+                    (r.patentes||[]).join(", "),
+                    r.updatedAt?new Date(r.updatedAt).toLocaleDateString("es-CL"):"",
+                  ]);
+                });
+                const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+                const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+                const url=URL.createObjectURL(blob);
+                const a=document.createElement("a");
+                a.href=url;a.download=`estacionamientos_${new Date().toLocaleDateString("es-CL").replace(/\//g,"-")}.csv`;
+                a.click();URL.revokeObjectURL(url);
+              }} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #22c55e",background:"rgba(34,197,94,.1)",color:"#22c55e",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                📥 Exportar CSV
+              </button>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:12}}>
               {Object.entries(SC).map(([sid,sc2])=>{
@@ -1103,6 +1680,140 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         )}
 
+        {tab==="dashboard"&&(()=>{
+          const totalSpots=SPOTS_DATA.length;
+          const totalOcc2=Object.keys(records).length;
+          const totalFree=totalSpots-totalOcc2;
+          const pctOcc=Math.round(totalOcc2/totalSpots*100);
+
+          // Por sector
+          const bySector=[1,2,3].map(sid=>{
+            const spots=SPOTS_DATA.filter(s=>s.sector===sid);
+            const occ=spots.filter(s=>records[s.id]).length;
+            return {sid,name:SECTOR_NAMES[sid],total:spots.length,occ,free:spots.length-occ,pct:Math.round(occ/spots.length*100)};
+          });
+
+          // Por tipo residente
+          const byTipo={propietario_residente:0,propietario_arriendo:0,arrendatario:0,sin_tipo:0};
+          Object.values(records).forEach(r=>{
+            if(r.tipoResidente&&byTipo[r.tipoResidente]!==undefined) byTipo[r.tipoResidente]++;
+            else if(r.tipoResidente) byTipo.sin_tipo++;
+            else byTipo.sin_tipo++;
+          });
+
+          // Por uso
+          const byUso={uso_exclusivo:0,visitas:0,ceder:0,sin_uso:0,otro:0};
+          Object.values(records).forEach(r=>{
+            if(r.usoEstacionamiento&&byUso[r.usoEstacionamiento]!==undefined) byUso[r.usoEstacionamiento]++;
+            else byUso.otro++;
+          });
+
+          // Registros recientes (últimos 5)
+          const recientes=Object.entries(records)
+            .filter(([,r])=>r.updatedAt)
+            .sort(([,a],[,b])=>new Date(b.updatedAt)-new Date(a.updatedAt))
+            .slice(0,5);
+
+          const StatCard=({label,value,sub,color})=>(
+            <div style={{background:"#111827",borderRadius:12,padding:"14px 16px",border:`1px solid ${color}30`,borderLeft:`3px solid ${color}`,flex:1,minWidth:120}}>
+              <div style={{fontSize:28,fontWeight:900,color,fontFamily:"monospace"}}>{value}</div>
+              <div style={{fontSize:12,fontWeight:700,color:"white",marginTop:2}}>{label}</div>
+              {sub&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{sub}</div>}
+            </div>
+          );
+
+          const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario",sin_tipo:"Sin especificar"};
+          const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cedido a comunero",sin_uso:"Sin uso",otro:"Otro"};
+          const usoColors={uso_exclusivo:"#22c55e",visitas:"#3b82f6",ceder:"#a855f7",sin_uso:"#6b7280",otro:"#f59e0b"};
+          const tipoColors={propietario_residente:"#22c55e",propietario_arriendo:"#3b82f6",arrendatario:"#f59e0b",sin_tipo:"#6b7280"};
+
+          return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {/* Stats principales */}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <StatCard label="Total espacios" value={totalSpots} color="#60a5fa"/>
+              <StatCard label="Ocupados" value={totalOcc2} sub={`${pctOcc}% del total`} color="#f59e0b"/>
+              <StatCard label="Disponibles" value={totalFree} sub={`${100-pctOcc}% del total`} color="#22c55e"/>
+            </div>
+
+            {/* Barra ocupación total */}
+            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:"white"}}>Ocupación total</span>
+                <span style={{fontSize:12,fontWeight:900,color:"#f59e0b",fontFamily:"monospace"}}>{pctOcc}%</span>
+              </div>
+              <div style={{height:10,background:"#1e293b",borderRadius:5,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pctOcc}%`,background:"linear-gradient(90deg,#f59e0b,#ef4444)",borderRadius:5,transition:"width .5s"}}/>
+              </div>
+            </div>
+
+            {/* Por sector */}
+            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>📍 Ocupación por sector</div>
+              {bySector.map(s=>(
+                <div key={s.sid} style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:SC[s.sid].accent,fontWeight:600}}>{s.name}</span>
+                    <span style={{fontSize:11,color:"#94a3b8",fontFamily:"monospace"}}>{s.occ}/{s.total} — {s.pct}%</span>
+                  </div>
+                  <div style={{height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${s.pct}%`,background:SC[s.sid].accent,borderRadius:4,transition:"width .5s"}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Por tipo residente */}
+            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>👤 Por tipo de residente</div>
+              {Object.entries(byTipo).filter(([,v])=>v>0).map(([k,v])=>(
+                <div key={k} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:tipoColors[k],flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{tipoL[k]}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"white",fontFamily:"monospace"}}>{v}</span>
+                  <div style={{width:60,height:6,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.round(v/totalOcc2*100)}%`,background:tipoColors[k],borderRadius:3}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Por uso */}
+            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>🚗 Por uso del estacionamiento</div>
+              {Object.entries(byUso).filter(([,v])=>v>0).map(([k,v])=>(
+                <div key={k} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:usoColors[k],flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{usoL[k]}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"white",fontFamily:"monospace"}}>{v}</span>
+                  <div style={{width:60,height:6,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.round(v/totalOcc2*100)}%`,background:usoColors[k],borderRadius:3}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Registros recientes */}
+            {recientes.length>0&&<div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>🕐 Últimos registros</div>
+              {recientes.map(([id,rec])=>{
+                const spot=SPOTS_DATA.find(s=>s.id===Number(id));
+                const sc2=SC[spot?.sector||1];
+                return <div key={id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,paddingBottom:10,borderBottom:"1px solid #1e293b"}}>
+                  <div style={{width:36,height:36,borderRadius:8,background:sc2.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:11,color:sc2.accent,flexShrink:0}}>#{id}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"white"}}>{rec.nombre||"Sin nombre"}</div>
+                    <div style={{fontSize:10,color:"#4b5563"}}>{TORRES_LABELS[spot?.torre]||spot?.torre} · {spot?.depto}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"#4b5563"}}>{rec.updatedAt?new Date(rec.updatedAt).toLocaleDateString("es-CL"):""}</div>
+                    <div style={{fontSize:10,color:sc2.accent,fontWeight:600}}>{rec.patentes?.join(", ")||"—"}</div>
+                  </div>
+                </div>;
+              })}
+            </div>}
+          </div>;
+        })()}
+
         {tab==="map"&&(
           <div>
             {[1,2,3].map(sid=>{
@@ -1118,8 +1829,11 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                 <div style={{padding:10,overflowX:"auto"}}>
                   <SectorMap sectorId={sid} records={records} onSpotClick={s=>setSelectedSpot(s)} highlightId={null}/>
                 </div>
-                <div style={{padding:"6px 14px 10px",display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",background:"#0f172a"}}>
-                  <Legend color={sc2.spotOcc} label="Ocupado"/>
+                <div style={{padding:"8px 14px 10px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",background:"#0f172a"}}>
+                  <Legend color="#22c55e" label="Uso exclusivo"/>
+                  <Legend color="#3b82f6" label="Visitas"/>
+                  <Legend color="#a855f7" label="Cedido"/>
+                  <Legend color="#78716c" label="Sin uso"/>
                   <Legend color="#2d3f5a" label="Libre"/>
                   <span style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>Toca un espacio para editar</span>
                 </div>
@@ -1127,6 +1841,8 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             })}
           </div>
         )}
+
+        {tab==="reclamos"&&<ReclamosTab/>}
       </div>
 
       {selectedSpot&&<SpotModal spot={selectedSpot} record={records[selectedSpot.id]} onClose={()=>setSelectedSpot(null)}
