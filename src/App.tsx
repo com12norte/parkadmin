@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ── SUPABASE ──
-const SUPABASE_URL = "https://wfnzlwungqveojrvapiv.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmbnpsd3VuZ3F2ZW9qcnZhcGl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMjE1MDQsImV4cCI6MjA5Nzc5NzUwNH0.-F0Krj1jywct4QNtWmLK-NP2qre8cr-9TDPG6vTStbM";
+const SUPABASE_URL = "https://qpuuggfcubsepcjwocxf.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdXVnZ2ZjdWJzZXBjandvY3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzk3ODQsImV4cCI6MjA5OTE1NTc4NH0.bTPWVT76QdNKvg9TuvMAX3TrRmfWgvKjuE1VcQWKYaM";
 
 const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation",...(opts.headers||{})},
