@@ -8,31 +8,61 @@ const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation",...(opts.headers||{})},
   ...opts,
 });
+const fromDb = (x) => ({
+  nombre: x.nombre,
+  email: x.email,
+  telefono: x.telefono,
+  tipoResidente: x.tipo_residente || x.tipoResidente,
+  usoEstacionamiento: x.uso_estacionamiento || x.usoEstacionamiento,
+  vehiculos: x.vehiculos || [],
+  patentes: x.patentes || [],
+  propietario: x.propietario,
+  nombreCedido: x.nombreCedido,
+  emailCedido: x.emailCedido,
+  telefonoCedido: x.telefonoCedido,
+  nombrePropietario: x.nombrePropietario,
+  emailPropietario: x.emailPropietario,
+  telefonoPropietario: x.telefonoPropietario,
+  updatedAt: x.updated_at || x.updatedAt,
+});
+
 const loadRegistros = async () => {
-  try { const res=await sbFetch("registros?select=*"); const data=await res.json(); const r={}; (Array.isArray(data)?data:[]).forEach(x=>{r[x.id]=x;}); return r; }
-  catch(e){ return {}; }
-};
-const upsertRegistro = async (id, record) => {
   try {
-    // Primero intenta actualizar (PATCH)
-    const patch = await sbFetch(`registros?id=eq.${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(record),
+    const res = await sbFetch("registros?select=*");
+    const data = await res.json();
+    const r = {};
+    (Array.isArray(data) ? data : []).forEach(x => { r[x.id] = fromDb(x); });
+    return r;
+  } catch(e) { return {}; }
+};
+// Mapear campos camelCase del estado React → snake_case de Supabase
+const toDb = (record) => ({
+  nombre: record.nombre,
+  email: record.email,
+  telefono: record.telefono,
+  tipo_residente: record.tipoResidente,
+  uso_estacionamiento: record.usoEstacionamiento,
+  vehiculos: record.vehiculos,
+  patentes: record.patentes,
+  propietario: record.nombre, // columna legacy
+  nombreCedido: record.nombreCedido,
+  emailCedido: record.emailCedido,
+  telefonoCedido: record.telefonoCedido,
+  nombrePropietario: record.nombrePropietario,
+  emailPropietario: record.emailPropietario,
+  telefonoPropietario: record.telefonoPropietario,
+  updated_at: record.updatedAt || new Date().toISOString(),
+});
+
+const upsertRegistro = async (id, record) => {
+  const body = { id, ...toDb(record) };
+  try {
+    const res = await sbFetch("registros", {
+      method: "POST",
+      headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(body),
     });
-    if (patch.status === 404 || patch.status === 406) {
-      // No existe → insertar (POST)
-      const post = await sbFetch("registros", {
-        method: "POST",
-        body: JSON.stringify({ id, ...record }),
-      });
-      if (!post.ok) {
-        const err = await post.text();
-        console.error("upsertRegistro POST error:", post.status, err);
-      }
-    } else if (!patch.ok) {
-      const err = await patch.text();
-      console.error("upsertRegistro PATCH error:", patch.status, err);
-    }
+    if (!res.ok) console.error("upsertRegistro error:", res.status, await res.text());
   } catch(e) { console.error("upsertRegistro exception:", e); }
 };
 const deleteRegistro = async (id) => {
@@ -989,8 +1019,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
     setFound(spot);
     const rec=records[spot.id];
-    if(rec&&rec.email){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
-    else{setIsEditing(false);setErrors({});setStep(1);}
+    if(rec){
+      // Ya existe registro — siempre pedir verificación
+      setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");
+    } else {
+      setIsEditing(false);setErrors({});setStep(1);
+    }
   };
 
   const handleEmailVerify=()=>{
@@ -1199,6 +1233,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
 
             {step==="verify"&&found&&(()=>{
               const sc0=SC[found.sector],rec=records[found.id];
+              const sinEmail=!rec?.email;
               return <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,.08)"}}>
                 <div style={{background:sc0.bg,padding:"20px 24px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -1211,18 +1246,28 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                   </div>
                 </div>
                 <div style={{padding:"22px"}}>
-                  <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
-                    <span style={{fontSize:18}}>ℹ️</span>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:700,color:"#166534",marginBottom:3}}>Esta unidad ya tiene un registro</div>
-                      <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>Registrado a nombre de <strong>{rec?.nombre||"un residente"}</strong>. Para modificar, verifica tu identidad.</div>
+                  {sinEmail?(
+                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"16px",marginBottom:16,textAlign:"center"}}>
+                      <div style={{fontSize:28,marginBottom:8}}>⚠️</div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:6}}>No se puede verificar identidad</div>
+                      <div style={{fontSize:12,color:"#b45309",lineHeight:1.5}}>Este registro no tiene correo electrónico asociado. Debes contactar a administración para modificarlo.</div>
                     </div>
-                  </div>
-                  <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Correo electrónico registrado</label>
-                  <input type="email" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setErrors(er=>({...er,emailVerify:""}));}} placeholder="correo@ejemplo.com"
-                    style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${errors.emailVerify?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#f8fafc"}}/>
-                  {errors.emailVerify&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:8,background:"#fff5f5",border:"1px solid #fecaca",fontSize:12,color:"#dc2626"}}>⚠️ {errors.emailVerify}</div>}
-                  <button onClick={handleEmailVerify} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar y Editar →</button>
+                  ):(
+                    <>
+                      <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
+                        <span style={{fontSize:18}}>ℹ️</span>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:"#166534",marginBottom:3}}>Esta unidad ya tiene un registro</div>
+                          <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>Registrado a nombre de <strong>{rec?.nombre||"un residente"}</strong>. Para modificar, verifica tu identidad.</div>
+                        </div>
+                      </div>
+                      <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Correo electrónico registrado</label>
+                      <input type="email" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setErrors(er=>({...er,emailVerify:""}));}} placeholder="correo@ejemplo.com"
+                        style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${errors.emailVerify?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#f8fafc"}}/>
+                      {errors.emailVerify&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:8,background:"#fff5f5",border:"1px solid #fecaca",fontSize:12,color:"#dc2626"}}>⚠️ {errors.emailVerify}</div>}
+                      <button onClick={handleEmailVerify} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar y Editar →</button>
+                    </>
+                  )}
                   <button onClick={()=>{setStep(0);setFound(null);setIsEditing(false);}} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Volver</button>
                 </div>
               </div>;
