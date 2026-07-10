@@ -12,9 +12,28 @@ const loadRegistros = async () => {
   try { const res=await sbFetch("registros?select=*"); const data=await res.json(); const r={}; (Array.isArray(data)?data:[]).forEach(x=>{r[x.id]=x;}); return r; }
   catch(e){ return {}; }
 };
-const upsertRegistro = async (id,record) => {
-  try { await sbFetch("registros",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify({id,...record})}); }
-  catch(e){}
+const upsertRegistro = async (id, record) => {
+  try {
+    // Primero intenta actualizar (PATCH)
+    const patch = await sbFetch(`registros?id=eq.${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(record),
+    });
+    if (patch.status === 404 || patch.status === 406) {
+      // No existe → insertar (POST)
+      const post = await sbFetch("registros", {
+        method: "POST",
+        body: JSON.stringify({ id, ...record }),
+      });
+      if (!post.ok) {
+        const err = await post.text();
+        console.error("upsertRegistro POST error:", post.status, err);
+      }
+    } else if (!patch.ok) {
+      const err = await patch.text();
+      console.error("upsertRegistro PATCH error:", patch.status, err);
+    }
+  } catch(e) { console.error("upsertRegistro exception:", e); }
 };
 const deleteRegistro = async (id) => {
   try { await sbFetch(`registros?id=eq.${id}`,{method:"DELETE"}); }
@@ -1035,7 +1054,6 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       updatedAt:new Date().toISOString()
     };
     setRecords(r=>({...r,[found.id]:data}));
-    upsertRegistro(found.id, data).catch(()=>{});
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
     const emailParams={
       nombre:form.nombre,
