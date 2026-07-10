@@ -35,6 +35,23 @@ const updateReclamo = async (id,patch) => {
   catch(e){}
 };
 
+// ── HISTORIAL (Supabase) ──
+const loadHistorial = async (spotId) => {
+  try {
+    const res=await sbFetch(`historial?spot_id=eq.${spotId}&select=*&order=created_at.desc`);
+    const data=await res.json();
+    return Array.isArray(data)?data:[];
+  } catch(e){ return []; }
+};
+const addHistorial = async (spotId, accion, detalle) => {
+  try {
+    await sbFetch("historial",{
+      method:"POST",
+      body:JSON.stringify({spot_id:spotId,accion,detalle,created_at:new Date().toISOString()})
+    });
+  } catch(e){ console.error("Historial error:",e); }
+};
+
 // ── EMAILJS ──
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
@@ -1011,10 +1028,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
       ...(form.usoEstacionamiento==="ceder"?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||""}:{}),
-      ...(form.tipoResidente==="arrendatario"?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
+      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
       updatedAt:new Date().toISOString()
     };
     setRecords(r=>({...r,[found.id]:data}));
+    upsertRegistro(found.id, data).catch(()=>{});
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
     const emailParams={
       nombre:form.nombre,
@@ -1027,15 +1045,15 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       fecha:new Date().toLocaleString("es-CL"),
       sector:SECTOR_NAMES[found.sector],
       email_residente:form.email||"",
-      ...(form.tipoResidente==="arrendatario"?{nombre_propietario:form.nombrePropietario||"",email_propietario:form.emailPropietario||"",telefono_propietario:form.telefonoPropietario||""}:{}),
+      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombre_propietario:form.nombrePropietario||"",email_propietario:form.emailPropietario||"",telefono_propietario:form.telefonoPropietario||""}:{}),
     };
-    sendEmail({...emailParams});
-    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()});
-    // Historial
+    sendEmail({...emailParams}).catch(()=>{});
+    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()}).catch(()=>{});
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
-    );
-    setStep(4);showToast("Registro guardado correctamente");
+    ).catch(()=>{});
+    setStep(4);
+    showToast("Registro guardado correctamente");
   };
 
   const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");setAceptaReglamento(false);setReglamentoExpanded(false);};
