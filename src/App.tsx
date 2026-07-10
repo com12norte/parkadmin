@@ -4,10 +4,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const SUPABASE_URL = "https://qpuuggfcubsepcjwocxf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdXVnZ2ZjdWJzZXBjandvY3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzk3ODQsImV4cCI6MjA5OTE1NTc4NH0.bTPWVT76QdNKvg9TuvMAX3TrRmfWgvKjuE1VcQWKYaM";
 
-const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-  headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation",...(opts.headers||{})},
-  ...opts,
-});
+const sbFetch = (path, opts={}) => {
+  const {headers:extraHeaders={}, ...restOpts} = opts;
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...restOpts,
+    headers:{
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+      ...extraHeaders,
+    },
+  });
+};
 const fromDb = (x) => ({
   nombre: x.nombre,
   email: x.email,
@@ -1087,7 +1096,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
       updatedAt:new Date().toISOString()
     };
+    // Actualizar estado local
     setRecords(r=>({...r,[found.id]:data}));
+    // Guardar en Supabase directamente (sin depender de comparación de estado)
+    upsertRegistro(found.id, data).then(()=>{
+      console.log("✅ Registro guardado en Supabase:", found.id);
+    }).catch(e=>console.error("❌ Error guardando:", e));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
     const emailParams={
       nombre:form.nombre,
