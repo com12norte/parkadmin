@@ -59,7 +59,7 @@ const EMAILJS_KEY = "wKxD2rJHuftU7W-WE";
 
 const sendEmail = async (params) => {
   try {
-    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
@@ -69,7 +69,10 @@ const sendEmail = async (params) => {
         template_params: params,
       }),
     });
-  } catch(e) { console.error("Email error:",e); }
+    const text = await res.text();
+    console.log("EmailJS response:", res.status, text);
+    if(res.status!==200) console.error("EmailJS error:", res.status, text);
+  } catch(e) { console.error("Email fetch error:",e); }
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -1438,11 +1441,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       <SummaryRow label="Uso" value={usoL[form.usoEstacionamiento]||"—"}/>
                       {form.tipoResidente==="arrendatario"&&<SummaryRow label="Propietario" value={form.nombrePropietario||"—"}/>}
                     </div>
-                    <button onClick={resetForm} style={{width:"100%",padding:"12px",borderRadius:9,border:"1.5px solid #2563eb",background:"white",color:"#2563eb",fontWeight:700,fontSize:13,cursor:"pointer"}}>Registrar otra unidad</button>
-                    <button onClick={()=>setReclamo({spot:found,record:records[found.id]})}
-                      style={{width:"100%",marginTop:8,padding:"12px",borderRadius:9,border:"1.5px solid #ef4444",background:"#fff5f5",color:"#dc2626",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                      ⚠️ Reportar ocupación indebida
-                    </button>
+                    <button onClick={()=>setEntered(false)} style={{width:"100%",padding:"12px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Volver al inicio</button>
                   </div>
                 </div>
                 <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:`2px solid ${sc4.accent}40`}}>
