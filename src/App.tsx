@@ -1104,20 +1104,28 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     }).catch(e=>console.error("❌ Error guardando:", e));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
     const emailParams={
-      nombre:form.nombre,
-      torre:TORRES_LABELS[found.torre]||found.torre,
-      depto:found.depto,
-      estac_id:found.id,
-      patentes:veh.map(v=>v.patente).join(", ")||"—",
-      telefono:form.telefono||"—",
-      uso:usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
-      fecha:new Date().toLocaleString("es-CL"),
-      sector:SECTOR_NAMES[found.sector],
-      email_residente:form.email||"",
-      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombre_propietario:form.nombrePropietario||"",email_propietario:form.emailPropietario||"",telefono_propietario:form.telefonoPropietario||""}:{}),
+      nombre: form.nombre,
+      name: form.nombre,           // From Name usa {{name}}
+      torre: TORRES_LABELS[found.torre]||found.torre,
+      depto: found.depto,
+      estac_id: found.id,
+      patentes: veh.map(v=>v.patente).join(", ")||"—",
+      telefono: form.telefono||"—",
+      uso: usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
+      fecha: new Date().toLocaleString("es-CL"),
+      sector: SECTOR_NAMES[found.sector],
+      email: form.email||"",           // Reply To usa {{email}}
+      email_residente: form.email||"", // para To Email
+      to_email: form.email||"",
+      tipo_residente: form.tipoResidente||"",
+      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{
+        nombre_propietario: form.nombrePropietario||"",
+        email_propietario: form.emailPropietario||"",
+        telefono_propietario: form.telefonoPropietario||"",
+      }:{}),
     };
-    sendEmail({...emailParams}).catch(()=>{});
-    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()}).catch(()=>{});
+    console.log("📧 Enviando email con params:", JSON.stringify(emailParams, null, 2));
+    sendEmail(emailParams).catch(()=>{});
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
     ).catch(()=>{});
