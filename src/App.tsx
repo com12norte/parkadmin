@@ -16,11 +16,11 @@ const getFirebase = () => {
   _fbReady = (async () => {
     const { initializeApp, getApps } = await import(`${FB_BASE}/firebase-app.js`);
     const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp } = await import(`${FB_BASE}/firebase-firestore.js`);
-    const { getAuth, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } = await import(`${FB_BASE}/firebase-auth.js`);
+    const { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`${FB_BASE}/firebase-auth.js`);
     const app = getApps().length ? getApps()[0] : initializeApp({ apiKey:FB_API_KEY, authDomain:FB_AUTH_DOMAIN, projectId:FB_PROJECT_ID, appId:FB_APP_ID });
     _db   = getFirestore(app);
     _auth = getAuth(app);
-    return { db:_db, auth:_auth, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged };
+    return { db:_db, auth:_auth, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   })();
   return _fbReady;
 };
@@ -656,22 +656,28 @@ const useInactivity = (onTimeout) => {
 
 // ── STAFF LOGIN ──
 const StaffLogin = ({onSuccess,onBack}) => {
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
 
-  const loginGoogle=async()=>{
+  const login=async()=>{
+    if(!email.trim()||!pass.trim()){setError("Completa todos los campos.");return;}
     setLoading(true); setError("");
     try {
-      const { auth, signInWithPopup, GoogleAuthProvider } = await getFirebase();
-      const provider = new GoogleAuthProvider();
-      const result   = await signInWithPopup(auth, provider);
-      window._gToken = result.credential?.accessToken || null; // guardar para Drive backup
+      const { auth, signInWithEmailAndPassword } = await getFirebase();
+      const result = await signInWithEmailAndPassword(auth, email.trim(), pass);
       onSuccess(result.user);
     } catch(e) {
       console.error("Login error:", e);
-      if(e.code==="auth/popup-closed-by-user") setError("Popup cerrado. Intenta de nuevo.");
-      else if(e.code==="auth/unauthorized-domain") setError("Dominio no autorizado en Firebase. Agrégalo en Authentication → Settings.");
-      else setError("Error al iniciar sesión: " + (e.message||e.code));
+      if(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found")
+        setError("Correo o contraseña incorrectos.");
+      else if(e.code==="auth/too-many-requests")
+        setError("Demasiados intentos. Espera unos minutos.");
+      else if(e.code==="auth/unauthorized-domain")
+        setError("Dominio no autorizado. Agrégalo en Firebase → Authentication → Settings.");
+      else
+        setError("Error al iniciar sesión: "+(e.message||e.code));
       setLoading(false);
     }
   };
@@ -685,17 +691,24 @@ const StaffLogin = ({onSuccess,onBack}) => {
           <h2 style={{margin:0,fontSize:22,fontWeight:900,color:"white",letterSpacing:-0.5}}>Acceso Personal</h2>
           <p style={{margin:"6px 0 0",fontSize:13,color:"#4b5563"}}>Administración · Conserjería</p>
         </div>
-        <div style={{background:"#111827",borderRadius:18,padding:28,border:"1px solid #1f2937",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
-          {error&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
-          <button onClick={loginGoogle} disabled={loading}
-            style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:loading?"#1f2937":"white",color:loading?"#6b7280":"#1f2937",fontWeight:700,fontSize:15,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12,boxShadow:"0 4px 16px rgba(0,0,0,.3)"}}>
-            {loading
-              ? <><span style={{width:18,height:18,border:"2px solid rgba(100,100,100,.3)",borderTop:"2px solid #6b7280",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Conectando...</>
-              : <><svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.6 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.3-.2-2.7-.4-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.1 8.1 2.9l5.7-5.7C34.6 5.1 29.6 3 24 3 16.3 3 9.7 7.9 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.1 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8l-6.6 5.1C9.6 40.9 16.3 45 24 45z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.8 2.4-2.4 4.4-4.4 5.9l6.6 5.4C41.1 36.3 44 30.6 44 24c0-1.3-.2-2.7-.4-4z"/></svg>
-                Ingresar con Google</>
-            }
-          </button>
-          <p style={{marginTop:16,fontSize:11,color:"#374151",textAlign:"center",lineHeight:1.5}}>Solo cuentas autorizadas por administración pueden acceder.</p>
+        <div style={{background:"#111827",borderRadius:18,padding:24,border:"1px solid #1f2937",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
+              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="correo@ejemplo.com"
+                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
+              <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="••••••••"
+                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
+            <button onClick={login} disabled={loading}
+              style={{padding:"13px",borderRadius:10,border:"none",background:loading?"#374151":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:loading?"not-allowed":"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              {loading?<><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
+            </button>
+          </div>
         </div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
