@@ -1,113 +1,115 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-// ── SUPABASE ──
-const SUPABASE_URL = "https://qpuuggfcubsepcjwocxf.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdXVnZ2ZjdWJzZXBjandvY3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzk3ODQsImV4cCI6MjA5OTE1NTc4NH0.bTPWVT76QdNKvg9TuvMAX3TrRmfWgvKjuE1VcQWKYaM";
+// ── FIREBASE CONFIG ──
+const FB_API_KEY     = "AIzaSyDwKf88v3syQn-BYlq8REkUZblkOvEHR80";
+const FB_AUTH_DOMAIN = "parkadmin-a38a0.firebaseapp.com";
+const FB_PROJECT_ID  = "parkadmin-a38a0";
+const FB_APP_ID      = "1:770524153774:web:16dde2c3d413c4ac472a3f";
 
-const sbFetch = (path, opts={}) => {
-  const {headers:extraHeaders={}, ...restOpts} = opts;
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    ...restOpts,
-    headers:{
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation",
-      ...extraHeaders,
-    },
-  });
+const FB_VER = "12.16.0";
+const FB_BASE = `https://www.gstatic.com/firebasejs/${FB_VER}`;
+
+// Dynamic Firebase loader (CDN ESM → stored in window)
+let _db = null, _auth = null, _fbReady = null;
+const getFirebase = () => {
+  if (_fbReady) return _fbReady;
+  _fbReady = (async () => {
+    const { initializeApp, getApps } = await import(`${FB_BASE}/firebase-app.js`);
+    const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp } = await import(`${FB_BASE}/firebase-firestore.js`);
+    const { getAuth, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } = await import(`${FB_BASE}/firebase-auth.js`);
+    const app = getApps().length ? getApps()[0] : initializeApp({ apiKey:FB_API_KEY, authDomain:FB_AUTH_DOMAIN, projectId:FB_PROJECT_ID, appId:FB_APP_ID });
+    _db   = getFirestore(app);
+    _auth = getAuth(app);
+    return { db:_db, auth:_auth, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged };
+  })();
+  return _fbReady;
 };
-const fromDb = (x) => ({
-  nombre: x.nombre,
-  email: x.email,
-  telefono: x.telefono,
-  tipoResidente: x.tipo_residente || x.tipoResidente,
-  usoEstacionamiento: x.uso_estacionamiento || x.usoEstacionamiento,
-  vehiculos: x.vehiculos || [],
-  patentes: x.patentes || [],
-  propietario: x.propietario,
-  nombreCedido: x.nombreCedido,
-  emailCedido: x.emailCedido,
-  telefonoCedido: x.telefonoCedido,
-  nombrePropietario: x.nombrePropietario,
-  emailPropietario: x.emailPropietario,
-  telefonoPropietario: x.telefonoPropietario,
-  updatedAt: x.updated_at || x.updatedAt,
-});
 
+// ── DB HELPERS ──
 const loadRegistros = async () => {
   try {
-    const res = await sbFetch("registros?select=*");
-    const data = await res.json();
+    const { db, getDocs, collection } = await getFirebase();
+    const snap = await getDocs(collection(db, "registros"));
     const r = {};
-    (Array.isArray(data) ? data : []).forEach(x => { r[x.id] = fromDb(x); });
+    snap.forEach(d => { r[d.id] = d.data(); });
     return r;
-  } catch(e) { return {}; }
+  } catch(e) { console.error("loadRegistros:", e); return {}; }
 };
-// Mapear campos camelCase del estado React → snake_case de Supabase
-const toDb = (record) => ({
-  nombre: record.nombre,
-  email: record.email,
-  telefono: record.telefono,
-  tipo_residente: record.tipoResidente,
-  uso_estacionamiento: record.usoEstacionamiento,
-  vehiculos: record.vehiculos,
-  patentes: record.patentes,
-  propietario: record.nombre, // columna legacy
-  nombreCedido: record.nombreCedido,
-  emailCedido: record.emailCedido,
-  telefonoCedido: record.telefonoCedido,
-  nombrePropietario: record.nombrePropietario,
-  emailPropietario: record.emailPropietario,
-  telefonoPropietario: record.telefonoPropietario,
-  updated_at: record.updatedAt || new Date().toISOString(),
-});
 
 const upsertRegistro = async (id, record) => {
-  const body = { id, ...toDb(record) };
   try {
-    const res = await sbFetch("registros", {
-      method: "POST",
-      headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) console.error("upsertRegistro error:", res.status, await res.text());
-  } catch(e) { console.error("upsertRegistro exception:", e); }
+    const { db, doc, setDoc, serverTimestamp } = await getFirebase();
+    await setDoc(doc(db, "registros", String(id)), { ...record, updatedAt: serverTimestamp() }, { merge: true });
+    console.log("✅ Firestore guardado:", id);
+  } catch(e) { console.error("upsertRegistro:", e); }
 };
+
 const deleteRegistro = async (id) => {
-  try { await sbFetch(`registros?id=eq.${id}`,{method:"DELETE"}); }
-  catch(e){}
+  try {
+    const { db, doc, deleteDoc } = await getFirebase();
+    await deleteDoc(doc(db, "registros", String(id)));
+  } catch(e) { console.error("deleteRegistro:", e); }
 };
 
-// ── RECLAMOS (Supabase) ──
+// ── RECLAMOS ──
 const loadReclamos = async () => {
-  try { const res=await sbFetch("reclamos?select=*&order=created_at.desc"); const data=await res.json(); return Array.isArray(data)?data:[]; }
-  catch(e){ return []; }
-};
-const insertReclamo = async (reclamo) => {
-  try { const res=await sbFetch("reclamos",{method:"POST",body:JSON.stringify(reclamo)}); const data=await res.json(); return Array.isArray(data)?data[0]:data; }
-  catch(e){ return null; }
-};
-const updateReclamo = async (id,patch) => {
-  try { await sbFetch(`reclamos?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(patch)}); }
-  catch(e){}
+  try {
+    const { db, getDocs, collection, query, orderBy } = await getFirebase();
+    const snap = await getDocs(query(collection(db, "reclamos"), orderBy("createdAt", "desc")));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error("loadReclamos:", e); return []; }
 };
 
-// ── HISTORIAL (Supabase) ──
+const insertReclamo = async (reclamo) => {
+  try {
+    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
+    const ref = await addDoc(collection(db, "reclamos"), { ...reclamo, createdAt: serverTimestamp() });
+    return { id: ref.id, ...reclamo };
+  } catch(e) { console.error("insertReclamo:", e); return null; }
+};
+
+const updateReclamo = async (id, patch) => {
+  try {
+    const { db, doc, updateDoc } = await getFirebase();
+    await updateDoc(doc(db, "reclamos", id), patch);
+  } catch(e) { console.error("updateReclamo:", e); }
+};
+
+// ── HISTORIAL ──
 const loadHistorial = async (spotId) => {
   try {
-    const res=await sbFetch(`historial?spot_id=eq.${spotId}&select=*&order=created_at.desc`);
-    const data=await res.json();
-    return Array.isArray(data)?data:[];
-  } catch(e){ return []; }
+    const { db, getDocs, collection, query, orderBy, where } = await getFirebase();
+    const snap = await getDocs(query(collection(db, "historial"), where("spot_id","==",Number(spotId)), orderBy("createdAt","desc")));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error("loadHistorial:", e); return []; }
 };
+
 const addHistorial = async (spotId, accion, detalle) => {
   try {
-    await sbFetch("historial",{
-      method:"POST",
-      body:JSON.stringify({spot_id:spotId,accion,detalle,created_at:new Date().toISOString()})
-    });
-  } catch(e){ console.error("Historial error:",e); }
+    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
+    await addDoc(collection(db, "historial"), { spot_id: Number(spotId), accion, detalle, createdAt: serverTimestamp() });
+  } catch(e) { console.error("addHistorial:", e); }
+};
+
+// ── GOOGLE DRIVE BACKUP ──
+const backupToDrive = async (records) => {
+  try {
+    const token = window._gToken;
+    if (!token) return;
+    const filename = `parkadmin_backup_${new Date().toISOString().slice(0,10)}.json`;
+    const content  = JSON.stringify(records, null, 2);
+    // Check if file exists
+    const search = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${filename}'&spaces=drive`, { headers: { Authorization: `Bearer ${token}` } });
+    const found  = await search.json();
+    const fileId = found.files?.[0]?.id;
+    const blob   = new Blob([content], { type: "application/json" });
+    const form   = new FormData();
+    form.append("metadata", new Blob([JSON.stringify({ name: filename, mimeType: "application/json" })], { type: "application/json" }));
+    form.append("file", blob);
+    const url    = fileId ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart` : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+    await fetch(url, { method: fileId ? "PATCH" : "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    console.log("✅ Backup Drive:", filename);
+  } catch(e) { console.warn("Drive backup failed (non-critical):", e); }
 };
 
 // ── EMAILJS ──
@@ -651,30 +653,27 @@ const useInactivity = (onTimeout) => {
     };
   }, [reset]);
 };
-let loginInProgress = false;
 
 // ── STAFF LOGIN ──
 const StaffLogin = ({onSuccess,onBack}) => {
-  const [email,setEmail]=useState("");
-  const [pass,setPass]=useState("");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
-  useEffect(()=>{loginInProgress=false;},[]);
 
-  const login=async()=>{
-    if(loginInProgress)return;
-    if(!email.trim()||!pass.trim()){setError("Completa todos los campos.");return;}
-    loginInProgress=true; setLoading(true); setError("");
-    try{
-      const res=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`},
-        body:JSON.stringify({email:email.trim(),password:pass}),
-      });
-      const data=await res.json();
-      if(data.access_token){loginInProgress=false;onSuccess();}
-      else{setError(data.error_description||data.msg||"Correo o contraseña incorrectos.");loginInProgress=false;setLoading(false);}
-    }catch(e){setError("Error de conexión.");loginInProgress=false;setLoading(false);}
+  const loginGoogle=async()=>{
+    setLoading(true); setError("");
+    try {
+      const { auth, signInWithPopup, GoogleAuthProvider } = await getFirebase();
+      const provider = new GoogleAuthProvider();
+      const result   = await signInWithPopup(auth, provider);
+      window._gToken = result.credential?.accessToken || null; // guardar para Drive backup
+      onSuccess(result.user);
+    } catch(e) {
+      console.error("Login error:", e);
+      if(e.code==="auth/popup-closed-by-user") setError("Popup cerrado. Intenta de nuevo.");
+      else if(e.code==="auth/unauthorized-domain") setError("Dominio no autorizado en Firebase. Agrégalo en Authentication → Settings.");
+      else setError("Error al iniciar sesión: " + (e.message||e.code));
+      setLoading(false);
+    }
   };
 
   return (
@@ -686,24 +685,17 @@ const StaffLogin = ({onSuccess,onBack}) => {
           <h2 style={{margin:0,fontSize:22,fontWeight:900,color:"white",letterSpacing:-0.5}}>Acceso Personal</h2>
           <p style={{margin:"6px 0 0",fontSize:13,color:"#4b5563"}}>Administración · Conserjería</p>
         </div>
-        <div style={{background:"#111827",borderRadius:18,padding:24,border:"1px solid #1f2937",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
-              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} placeholder="correo@ejemplo.com"
-                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
-              <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}} placeholder="••••••••"
-                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-            </div>
-            {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
-            <button onClick={login} disabled={loading}
-              style={{padding:"13px",borderRadius:10,border:"none",background:loading?"#374151":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:loading?"not-allowed":"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              {loading?<><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
-            </button>
-          </div>
+        <div style={{background:"#111827",borderRadius:18,padding:28,border:"1px solid #1f2937",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
+          {error&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
+          <button onClick={loginGoogle} disabled={loading}
+            style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:loading?"#1f2937":"white",color:loading?"#6b7280":"#1f2937",fontWeight:700,fontSize:15,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12,boxShadow:"0 4px 16px rgba(0,0,0,.3)"}}>
+            {loading
+              ? <><span style={{width:18,height:18,border:"2px solid rgba(100,100,100,.3)",borderTop:"2px solid #6b7280",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Conectando...</>
+              : <><svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.6 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.3-.2-2.7-.4-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.1 8.1 2.9l5.7-5.7C34.6 5.1 29.6 3 24 3 16.3 3 9.7 7.9 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.1 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8l-6.6 5.1C9.6 40.9 16.3 45 24 45z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.8 2.4-2.4 4.4-4.4 5.9l6.6 5.4C41.1 36.3 44 30.6 44 24c0-1.3-.2-2.7-.4-4z"/></svg>
+                Ingresar con Google</>
+            }
+          </button>
+          <p style={{marginTop:16,fontSize:11,color:"#374151",textAlign:"center",lineHeight:1.5}}>Solo cuentas autorizadas por administración pueden acceder.</p>
         </div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -1960,6 +1952,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 export default function App() {
   const [screen,setScreen]=useState("home");
   const [staffAuth,setStaffAuth]=useState(false);
+  const [staffUser,setStaffUser]=useState(null);
   const [records,setRecords]=useState({});
   const [loading,setLoading]=useState(true);
   const loadedRef=useRef(false);
@@ -1989,8 +1982,8 @@ export default function App() {
 
   if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
-    if(!staffAuth) return <StaffLogin onSuccess={()=>setStaffAuth(true)} onBack={()=>setScreen("home")}/>;
-    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);}}/>;
+    if(!staffAuth) return <StaffLogin onSuccess={(user)=>{setStaffAuth(true);setStaffUser(user);backupToDrive(records);}} onBack={()=>setScreen("home")}/>;
+    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);setStaffUser(null);}}/>;
   }
   return <HomeScreen onGo={setScreen}/>;
 }
