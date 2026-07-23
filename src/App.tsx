@@ -113,26 +113,27 @@ const backupToDrive = async (records) => {
 };
 
 // ── EMAILJS ──
-const EMAILJS_SERVICE = "service_vxhdrlx";
+const EMAILJS_SERVICE  = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
-const EMAILJS_KEY = "wKxD2rJHuftU7W-WE";
+const EMAILJS_KEY      = "wKxD2rJHuftU7W-WE";
+const ADMIN_EMAIL      = "com12norte@gmail.com";
 
 const sendEmail = async (params) => {
   try {
     const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
       method: "POST",
-      headers: {"Content-Type":"application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        service_id: EMAILJS_SERVICE,
-        template_id: EMAILJS_TEMPLATE,
-        user_id: EMAILJS_KEY,
+        service_id:      EMAILJS_SERVICE,
+        template_id:     EMAILJS_TEMPLATE,
+        user_id:         EMAILJS_KEY,
         template_params: params,
       }),
     });
     const text = await res.text();
-    console.log("EmailJS response:", res.status, text);
-    if(res.status!==200) console.error("EmailJS error:", res.status, text);
-  } catch(e) { console.error("Email fetch error:",e); }
+    if(res.status===200) console.log("✅ Email enviado a:", params.to_email||ADMIN_EMAIL);
+    else console.error("❌ EmailJS error:", res.status, text);
+  } catch(e) { console.error("❌ sendEmail exception:", e); }
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -521,15 +522,18 @@ const ReclamoModal = ({spot,record,onClose,onSent}) => {
     };
     await insertReclamo(reclamo);
     sendEmail({
-      tipo:"Reclamo de ocupación indebida",
-      nombre:reclamo.nombre_residente,
-      torre:TORRES_LABELS[spot.torre]||spot.torre,
-      depto:spot.depto,
-      estac_id:spot.id,
-      sector:SECTOR_NAMES[spot.sector],
-      patente_intrusa:reclamo.patente_intrusa||"No especificada",
-      descripcion:reclamo.descripcion,
-      fecha:new Date().toLocaleString("es-CL"),
+      tipo: "⚠️ Reclamo de ocupación indebida",
+      nombre: reclamo.nombre_residente,
+      torre: TORRES_LABELS[spot.torre]||spot.torre,
+      depto: spot.depto,
+      estac_id: spot.id,
+      sector: SECTOR_NAMES[spot.sector],
+      patentes: reclamo.patente_intrusa||"No especificada",
+      telefono: "—",
+      uso: `Patente intrusa: ${reclamo.patente_intrusa||"No especificada"} | ${reclamo.descripcion}`,
+      fecha: new Date().toLocaleString("es-CL"),
+      email: record?.email||"—",
+      tipo_residente: "Reclamo",
     });
     setSending(false);
     onSent&&onSent();
@@ -797,11 +801,17 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
     else{setResult("not_found");}
   };
   const notificarAdmin=()=>{
+    const patente=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
     sendEmail({
-      tipo:"Patente no registrada - Posible ocupación indebida",
-      patente:queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,""),
-      fecha:new Date().toLocaleString("es-CL"),
-      mensaje:"Un residente reportó ocupación indebida pero su patente no está registrada en el sistema.",
+      tipo: "⚠️ Alerta: Patente no registrada",
+      nombre: "Residente no identificado",
+      torre: "—", depto: "—", estac_id: "—", sector: "—",
+      patentes: patente,
+      telefono: "—",
+      uso: "Posible ocupación indebida — patente no registrada en el sistema",
+      fecha: new Date().toLocaleString("es-CL"),
+      email: "—",
+      tipo_residente: "No registrado",
     });
     setNotified(true);
     showToast("Administración notificada","info");
@@ -1103,33 +1113,32 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     };
     // Actualizar estado local
     setRecords(r=>({...r,[found.id]:data}));
-    // Guardar en Supabase directamente (sin depender de comparación de estado)
+    // Guardar en Firestore
     upsertRegistro(found.id, data).then(()=>{
-      console.log("✅ Registro guardado en Supabase:", found.id);
+      console.log("✅ Registro guardado en Firestore:", found.id);
     }).catch(e=>console.error("❌ Error guardando:", e));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
+    const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario/Ocupante"};
     const emailParams={
+      tipo: isEditing?"Modificación de registro":"Nuevo registro",
       nombre: form.nombre,
-      name: form.nombre,           // From Name usa {{name}}
       torre: TORRES_LABELS[found.torre]||found.torre,
       depto: found.depto,
       estac_id: found.id,
+      sector: SECTOR_NAMES[found.sector],
       patentes: veh.map(v=>v.patente).join(", ")||"—",
       telefono: form.telefono||"—",
       uso: usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
       fecha: new Date().toLocaleString("es-CL"),
-      sector: SECTOR_NAMES[found.sector],
-      email: form.email||"",           // Reply To usa {{email}}
-      email_residente: form.email||"", // para To Email
-      to_email: form.email||"",
-      tipo_residente: form.tipoResidente||"",
+      email: form.email||"—",
+      tipo_residente: tipoL[form.tipoResidente]||form.tipoResidente,
       ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{
         nombre_propietario: form.nombrePropietario||"",
         email_propietario: form.emailPropietario||"",
         telefono_propietario: form.telefonoPropietario||"",
       }:{}),
     };
-    console.log("📧 Enviando email con params:", JSON.stringify(emailParams, null, 2));
+    // Email a administración
     sendEmail(emailParams).catch(()=>{});
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
