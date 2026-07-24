@@ -112,29 +112,57 @@ const backupToDrive = async (records) => {
   } catch(e) { console.warn("Drive backup failed (non-critical):", e); }
 };
 
-// ── EMAILJS ──
-const EMAILJS_SERVICE  = "service_vxhdrlx";
-const EMAILJS_TEMPLATE = "template_dgshb8a";
-const EMAILJS_KEY      = "wKxD2rJHuftU7W-WE";
-const ADMIN_EMAIL      = "com12norte@gmail.com";
+// ── GOOGLE APPS SCRIPT EMAIL ──
+const GAS_URL     = "https://script.google.com/macros/s/AKfycbzviLbb9GMcZUgvWCASaV_aOPNwBYURksvsVnkyIOEwNEuc80_Al8xHv0oydqpBooC1/exec";
+const ADMIN_EMAIL = "com12norte@gmail.com";
 
-const sendEmail = async (params) => {
+const buildEmailHTML = (p) => `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;border-radius:12px;overflow:hidden">
+  <div style="background:#0F2557;padding:24px 32px">
+    <h1 style="color:#C9A84C;margin:0;font-size:22px">🏠 Condominio 12 Norte</h1>
+    <p style="color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px">Viña del Mar</p>
+  </div>
+  <div style="padding:28px 32px;background:white">
+    <h2 style="color:#0F2557;margin:0 0 16px">${p.tipo||"Notificación"}</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      ${p.nombre?`<tr><td style="color:#64748b;padding:6px 0;width:140px">Residente</td><td style="font-weight:700">${p.nombre}</td></tr>`:""}
+      ${p.tipo_residente?`<tr><td style="color:#64748b;padding:6px 0">Tipo</td><td>${p.tipo_residente}</td></tr>`:""}
+      ${p.torre?`<tr><td style="color:#64748b;padding:6px 0">Torre / Depto</td><td style="font-weight:600">${p.torre} · ${p.depto||""}</td></tr>`:""}
+      ${p.estac_id?`<tr><td style="color:#64748b;padding:6px 0">Estacionamiento</td><td style="font-weight:700;color:#0F2557">#${p.estac_id} · ${p.sector||""}</td></tr>`:""}
+      ${p.patentes?`<tr><td style="color:#64748b;padding:6px 0">Patentes</td><td style="font-family:monospace;font-weight:600">${p.patentes}</td></tr>`:""}
+      ${p.uso?`<tr><td style="color:#64748b;padding:6px 0">Uso</td><td>${p.uso}</td></tr>`:""}
+      ${p.telefono&&p.telefono!=="—"?`<tr><td style="color:#64748b;padding:6px 0">Teléfono</td><td>${p.telefono}</td></tr>`:""}
+      ${p.email&&p.email!=="—"?`<tr><td style="color:#64748b;padding:6px 0">Email</td><td>${p.email}</td></tr>`:""}
+      ${p.nombre_propietario?`<tr><td style="color:#64748b;padding:6px 0">Propietario</td><td>${p.nombre_propietario}</td></tr>`:""}
+      ${p.fecha?`<tr><td style="color:#64748b;padding:6px 0">Fecha</td><td>${p.fecha}</td></tr>`:""}
+    </table>
+  </div>
+  <div style="padding:16px 32px;background:#f1f5f9;font-size:11px;color:#94a3b8;text-align:center">
+    Condominio 12 Norte · Viña del Mar · com12norte@gmail.com
+  </div>
+</div>`;
+
+const sendEmail = async ({ to_email, subject, params }) => {
   try {
-    const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    const html = buildEmailHTML(params || {});
+    const text = params ? Object.entries(params).map(([k,v])=>`${k}: ${v}`).join("\n") : "";
+    const res = await fetch(GAS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        service_id:      EMAILJS_SERVICE,
-        template_id:     EMAILJS_TEMPLATE,
-        user_id:         EMAILJS_KEY,
-        template_params: params,
+        to:      to_email || ADMIN_EMAIL,
+        subject: subject  || `Notificación · Condominio 12 Norte`,
+        html,
+        text,
       }),
     });
-    const text = await res.text();
-    if(res.status===200) console.log("✅ Email enviado a:", params.to_email||ADMIN_EMAIL);
-    else console.error("❌ EmailJS error:", res.status, text);
+    const data = await res.json();
+    if(data.ok) console.log("✅ Email enviado a:", to_email || ADMIN_EMAIL);
+    else console.error("❌ GAS error:", data);
   } catch(e) { console.error("❌ sendEmail exception:", e); }
 };
+
+
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
   {id:41,torre:"1080",depto:"A1",sector:1,gx:1,gy:2},{id:46,torre:"1038",depto:"A1",sector:1,gx:1,gy:3},
@@ -522,18 +550,21 @@ const ReclamoModal = ({spot,record,onClose,onSent}) => {
     };
     await insertReclamo(reclamo);
     sendEmail({
-      tipo: "⚠️ Reclamo de ocupación indebida",
-      nombre: reclamo.nombre_residente,
-      torre: TORRES_LABELS[spot.torre]||spot.torre,
-      depto: spot.depto,
-      estac_id: spot.id,
-      sector: SECTOR_NAMES[spot.sector],
-      patentes: reclamo.patente_intrusa||"No especificada",
-      telefono: "—",
-      uso: `Patente intrusa: ${reclamo.patente_intrusa||"No especificada"} | ${reclamo.descripcion}`,
-      fecha: new Date().toLocaleString("es-CL"),
-      email: record?.email||"—",
-      tipo_residente: "Reclamo",
+      to_email: ADMIN_EMAIL,
+      subject: `⚠️ Reclamo ocupación indebida · Estac. #${spot.id} · ${reclamo.nombre_residente}`,
+      params: {
+        tipo: "⚠️ Reclamo de ocupación indebida",
+        nombre: reclamo.nombre_residente,
+        torre: TORRES_LABELS[spot.torre]||spot.torre,
+        depto: spot.depto,
+        estac_id: spot.id,
+        sector: SECTOR_NAMES[spot.sector],
+        patentes: reclamo.patente_intrusa||"No especificada",
+        uso: reclamo.descripcion,
+        fecha: new Date().toLocaleString("es-CL"),
+        email: record?.email||"—",
+        tipo_residente: "Reclamo",
+      },
     });
     setSending(false);
     onSent&&onSent();
@@ -803,15 +834,15 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
   const notificarAdmin=()=>{
     const patente=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
     sendEmail({
-      tipo: "⚠️ Alerta: Patente no registrada",
-      nombre: "Residente no identificado",
-      torre: "—", depto: "—", estac_id: "—", sector: "—",
-      patentes: patente,
-      telefono: "—",
-      uso: "Posible ocupación indebida — patente no registrada en el sistema",
-      fecha: new Date().toLocaleString("es-CL"),
-      email: "—",
-      tipo_residente: "No registrado",
+      to_email: ADMIN_EMAIL,
+      subject: `⚠️ Patente no registrada · ${patente}`,
+      params: {
+        tipo: "⚠️ Alerta: Patente no registrada",
+        nombre: "Residente no identificado",
+        patentes: patente,
+        uso: "Posible ocupación indebida — patente no registrada en el sistema",
+        fecha: new Date().toLocaleString("es-CL"),
+      },
     });
     setNotified(true);
     showToast("Administración notificada","info");
@@ -1139,7 +1170,19 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       }:{}),
     };
     // Email a administración
-    sendEmail(emailParams).catch(()=>{});
+    sendEmail({
+      to_email: ADMIN_EMAIL,
+      subject: `${isEditing?"Modificación":"Nuevo registro"} · Estac. #${found.id} · ${form.nombre}`,
+      params: emailParams,
+    }).catch(()=>{});
+    // Confirmación al residente
+    if(form.email?.trim()){
+      sendEmail({
+        to_email: form.email.trim(),
+        subject: `✅ Registro confirmado · Estacionamiento #${found.id} · Condominio 12 Norte`,
+        params: {...emailParams, tipo:"✅ Registro confirmado"},
+      }).catch(()=>{});
+    }
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
     ).catch(()=>{});
