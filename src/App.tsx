@@ -193,11 +193,28 @@ const DEPTOS_ALL = ["A1","B2","C3","D4","E5","E6","F5","F6","G7","H8"];
 
 const validarTelefono = (tel) => {
   if(!tel?.trim()) return null;
-  const clean = tel.replace(/[\s\-\+\(\)]/g,'').replace(/^56/,'');
-  if(!/^9\d{8}$/.test(clean)) return "Debe ser móvil chileno (ej: 9 1234 5678)";
-  if(/^(\d)\1{8}$/.test(clean)) return "Ingresa un número real";
-  if(["912345678","987654321","900000000"].includes(clean)) return "Ingresa un número real";
+  const digits = tel.replace(/\D/g,'');
+  if(digits.length !== 9) return "Debe tener 9 dígitos después del +56";
+  if(!/^9\d{8}$/.test(digits)) return "Debe comenzar con 9 (móvil chileno)";
+  if(/^(\d)\1{8}$/.test(digits)) return "Ingresa un número real";
+  if(["912345678","987654321","900000000"].includes(digits)) return "Ingresa un número real";
   return null;
+};
+
+// Campo de teléfono con +56 fijo
+const PhoneInput = ({value, onChange, error, placeholder="9 1234 5678"}) => {
+  const handleChange = (e) => {
+    // Solo permitir dígitos, espacios y guiones
+    const raw = e.target.value.replace(/[^\d\s\-]/g,'');
+    onChange(raw);
+  };
+  return (
+    <div style={{display:"flex",border:`1.5px solid ${error?"#e53e3e":"#e2e8f0"}`,borderRadius:8,overflow:"hidden",background:"white"}}>
+      <div style={{padding:"9px 10px",background:"#f1f5f9",borderRight:"1.5px solid #e2e8f0",fontSize:13,fontWeight:700,color:"#475569",whiteSpace:"nowrap",flexShrink:0}}>+56</div>
+      <input value={value} onChange={handleChange} placeholder={placeholder} maxLength={12} inputMode="numeric"
+        style={{flex:1,padding:"9px 11px",fontSize:13,border:"none",outline:"none",fontFamily:"monospace",background:"white",minWidth:0}}/>
+    </div>
+  );
 };
 
 function emptyForm() {
@@ -1069,6 +1086,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
         if(!form.emailPropietario?.trim())e.emailPropietario="Requerido";
         if(!form.telefonoPropietario?.trim())e.telefonoPropietario="Requerido";
         else{const err=validarTelefono(form.telefonoPropietario);if(err)e.telefonoPropietario=err;}
+        // Validar que los datos del propietario no sean iguales a los del residente
+        if(form.nombrePropietario?.trim() && form.nombrePropietario.trim().toLowerCase()===form.nombre.trim().toLowerCase())
+          e.nombrePropietario="El nombre del propietario no puede ser igual al tuyo";
+        if(form.emailPropietario?.trim() && form.emailPropietario.trim().toLowerCase()===form.email?.trim().toLowerCase())
+          e.emailPropietario="El correo del propietario no puede ser igual al tuyo";
+        if(form.telefonoPropietario?.trim() && form.telefonoPropietario.trim()===form.telefono?.trim())
+          e.telefonoPropietario="El teléfono del propietario no puede ser igual al tuyo";
       }
     }
     if(s===2){
@@ -1346,7 +1370,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                           :"Como propietario no residente, ingresa los datos de quien ocupa la unidad."}
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {[["nombrePropietario","Nombre completo","Nombre y apellido","text"],["emailPropietario","Correo electrónico","correo@ejemplo.com","email"],["telefonoPropietario","Teléfono","+56 9 ...","tel"]].map(([k,lbl,ph,type])=>(
+                        {[["nombrePropietario","Nombre completo","Nombre y apellido","text"],["emailPropietario","Correo electrónico","correo@ejemplo.com","email"]].map(([k,lbl,ph,type])=>(
                           <div key={k}>
                             <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
                             <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1354,10 +1378,15 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                             {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                           </div>
                         ))}
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Teléfono <span style={{color:"#e53e3e"}}>*</span></label>
+                          <PhoneInput value={form.telefonoPropietario||""} onChange={v=>setF("telefonoPropietario",v)} error={errors.telefonoPropietario}/>
+                          {errors.telefonoPropietario&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefonoPropietario}</span>}
+                        </div>
                       </div>
                     </div>
                   )}
-                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false],["telefono","6. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
+                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
                       <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1365,6 +1394,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                     </div>
                   ))}
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>6. Teléfono</label>
+                    <PhoneInput value={form.telefono} onChange={v=>setF("telefono",v)} error={errors.telefono}/>
+                    {errors.telefono&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefono}</span>}
+                  </div>
                 </div>
                 <div style={{display:"flex",gap:10,marginTop:20}}>
                   <button onClick={()=>setStep(0)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
@@ -1395,7 +1429,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       </a>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                      {[["nombreCedido","Nombre completo","Ej: María González","text"],["emailCedido","Correo electrónico","correo@ejemplo.com","email"],["telefonoCedido","Teléfono","+56 9 ...","tel"]].map(([k,lbl,ph,type])=>(
+                      {[["nombreCedido","Nombre completo","Ej: María González","text"],["emailCedido","Correo electrónico","correo@ejemplo.com","email"]].map(([k,lbl,ph,type])=>(
                         <div key={k}>
                           <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
                           <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1403,6 +1437,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                           {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                         </div>
                       ))}
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Teléfono <span style={{color:"#e53e3e"}}>*</span></label>
+                        <PhoneInput value={form.telefonoCedido||""} onChange={v=>setF("telefonoCedido",v)} error={errors.telefonoCedido}/>
+                        {errors.telefonoCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefonoCedido}</span>}
+                      </div>
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Documento de autorización <span style={{color:"#e53e3e"}}>*</span></label>
                         <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Adjunta la declaración simple firmada.</div>
@@ -1450,13 +1489,22 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                         {errors[`pat_${i}`]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[`pat_${i}`]}</span>}
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                        {[["marca","Marca","Toyota, Kia..."],["color","Color","Blanco, Negro..."]].map(([k,lbl,ph])=>(
-                          <div key={k}>
-                            <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl}</label>
-                            <input value={v[k]} onChange={e=>updateVeh(i,k,e.target.value)} placeholder={ph}
-                              style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                          </div>
-                        ))}
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Marca</label>
+                          <input value={v.marca} onChange={e=>updateVeh(i,"marca",e.target.value)} placeholder="Toyota, Kia..." list={`marcas_${i}`}
+                            style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                          <datalist id={`marcas_${i}`}>
+                            {["Toyota","Kia","Hyundai","Chevrolet","Suzuki","Nissan","Mazda","Honda","Ford","Volkswagen","Peugeot","Renault","Mitsubishi","Subaru","Jeep","Fiat","BMW","Mercedes-Benz","Audi","Volvo","Citroën","Chery","MG","BYD","GWM","JAC","Haval","Geely","Lifan","BAIC","Hongqi","Dodge","RAM","Isuzu","SsangYong"].map(m=><option key={m} value={m}/>)}
+                          </datalist>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Color</label>
+                          <input value={v.color} onChange={e=>updateVeh(i,"color",e.target.value)} placeholder="Blanco, Negro..." list={`colores_${i}`}
+                            style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                          <datalist id={`colores_${i}`}>
+                            {["Blanco","Negro","Gris","Plata","Rojo","Azul","Verde","Café","Beige","Naranjo","Amarillo","Morado","Celeste","Vino"].map(c=><option key={c} value={c}/>)}
+                          </datalist>
+                        </div>
                       </div>
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>¿Es de visita recurrente?</label>
@@ -1469,13 +1517,15 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                         {v.esVisita==="si"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 12px",borderRadius:8,background:"#eff6ff",border:"1px solid #bfdbfe"}}>
                             <div style={{fontSize:10,fontWeight:700,color:"#1d4ed8"}}>Datos de la visita</div>
-                            {[["nombreVisita","Nombre visita","Ej: María González"],["telefonoVisita","Teléfono visita","+56 9 ..."]].map(([k,lbl,ph])=>(
-                              <div key={k}>
-                                <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>{lbl}</label>
-                                <input value={v[k]||""} onChange={e=>updateVeh(i,k,e.target.value)} placeholder={ph}
-                                  style={{width:"100%",padding:"8px 10px",borderRadius:7,fontSize:12,border:"1.5px solid #bfdbfe",outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
-                              </div>
-                            ))}
+                            <div>
+                              <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>Nombre visita</label>
+                              <input value={v.nombreVisita||""} onChange={e=>updateVeh(i,"nombreVisita",e.target.value)} placeholder="Ej: María González"
+                                style={{width:"100%",padding:"8px 10px",borderRadius:7,fontSize:12,border:"1.5px solid #bfdbfe",outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>Teléfono visita</label>
+                              <PhoneInput value={v.telefonoVisita||""} onChange={val=>updateVeh(i,"telefonoVisita",val)} placeholder="9 1234 5678"/>
+                            </div>
                           </div>
                         )}
                       </div>
