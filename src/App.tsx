@@ -219,9 +219,10 @@ const PhoneInput = ({value, onChange, error, placeholder="9 1234 5678"}) => {
 
 function emptyForm() {
   return {
-    torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",
-    nombrePropietario:"",emailPropietario:"",telefonoPropietario:"",
-    usoEstacionamiento:"",nombreCedido:"",emailCedido:"",telefonoCedido:"",docCedido:null,
+    torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",rut:"",
+    nombrePropietario:"",emailPropietario:"",telefonoPropietario:"",rutPropietario:"",
+    usoEstacionamiento:"",nombreCedido:"",emailCedido:"",telefonoCedido:"",rutCedido:"",unidadCedido:"",docCedido:null,
+    fechaPrestamo:"",diasPrestamo:[],aceptaDeclaracion:false,
     vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]
   };
 }
@@ -1109,6 +1110,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     const e={};
     if(s===1){
       if(!form.nombre.trim())e.nombre="Requerido";
+      if(!form.rut?.trim())e.rut="Requerido";
       if(!form.tipoResidente)e.tipoResidente="Selecciona una opción";
       if(form.telefono){const err=validarTelefono(form.telefono);if(err)e.telefono=err;}
       if(form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo"){
@@ -1127,12 +1129,17 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     }
     if(s===2){
       if(!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
-      if(form.usoEstacionamiento==="ceder"){
+      if(form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias"){
         if(!form.nombreCedido?.trim())e.nombreCedido="Requerido";
         if(!form.emailCedido?.trim())e.emailCedido="Requerido";
+        if(!form.rutCedido?.trim())e.rutCedido="Requerido";
+        if(!form.unidadCedido?.trim())e.unidadCedido="Requerido";
         if(!form.telefonoCedido?.trim())e.telefonoCedido="Requerido";
         else{const err=validarTelefono(form.telefonoCedido);if(err)e.telefonoCedido=err;}
-        if(!form.docCedido)e.docCedido="Debes adjuntar el documento de autorización";
+        if(!form.docCedido)e.docCedido="Debes adjuntar el carnet de identidad";
+        if(!form.aceptaDeclaracion)e.aceptaDeclaracion="Debes confirmar la declaración";
+        if(form.usoEstacionamiento==="ceder_dias"&&(!form.diasPrestamo||form.diasPrestamo.length===0))
+          e.diasPrestamo="Agrega al menos un día de préstamo";
       }
     }
     if(s===3){
@@ -1157,7 +1164,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       nombre:form.nombre,email:form.email,telefono:form.telefono,
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
-      ...(form.usoEstacionamiento==="ceder"?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||""}:{}),
+      ...((form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias")?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||"",diasPrestamo:form.diasPrestamo||[]}:{}),
       ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
       updatedAt:new Date().toISOString()
     };
@@ -1167,7 +1174,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     upsertRegistro(found.id, data).then(()=>{
       console.log("✅ Registro guardado en Firestore:", found.id);
     }).catch(e=>console.error("❌ Error guardando:", e));
-    const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
+    const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
     const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario/Ocupante"};
     const emailParams={
       tipo: isEditing?"Modificación de registro":"Nuevo registro",
@@ -1416,7 +1423,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       </div>
                     </div>
                   )}
-                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false]].map(([k,lbl,ph,type,req])=>(
+                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["rut","5. RUT","Ej: 12.345.678-9","text",true],["email","6. Correo electrónico","correo@ejemplo.com","email",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
                       <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1425,7 +1432,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                     </div>
                   ))}
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>6. Teléfono</label>
+                    <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>7. Teléfono</label>
                     <PhoneInput value={form.telefono} onChange={v=>setF("telefono",v)} error={errors.telefono}/>
                     {errors.telefono&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefono}</span>}
                   </div>
@@ -1448,15 +1455,14 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                 {errors.usoEstacionamiento&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginBottom:8}}>{errors.usoEstacionamiento}</span>}
                 {radioBtn("usoEstacionamiento","uso_exclusivo","Uso exclusivo para vehículo(s) del residente.")}
                 {radioBtn("usoEstacionamiento","visitas","Se utilizará principalmente para visitas.")}
-                {radioBtn("usoEstacionamiento","ceder","Lo prestaré / cederé a otro comunero.")}
+                {radioBtn("usoEstacionamiento","ceder_largo","Lo prestaré a largo plazo (renovación cada 6 meses).")}
+                {radioBtn("usoEstacionamiento","ceder_dias","Lo prestaré por día(s) — indicar fechas.")}
                 {radioBtn("usoEstacionamiento","sin_uso","No tengo vehículo ni lo usaré por ahora.")}
-                {form.usoEstacionamiento==="ceder"&&(
+
+                {(form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias")&&(
                   <div style={{marginTop:16,padding:16,borderRadius:12,background:"#f0f9ff",border:"1.5px solid #bae6fd"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <span>🤝 Datos del comunero beneficiario</span>
-                      <a href="/declaracion-autorizacion.docx" download style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,background:"#0369a1",color:"white",fontSize:10,fontWeight:700,textDecoration:"none"}}>
-                        📄 Descargar declaración
-                      </a>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:14}}>
+                      🤝 Datos del comunero beneficiario
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
                       {[["nombreCedido","Nombre completo","Ej: María González","text"],["emailCedido","Correo electrónico","correo@ejemplo.com","email"]].map(([k,lbl,ph,type])=>(
@@ -1468,18 +1474,132 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                         </div>
                       ))}
                       <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>RUT del beneficiario <span style={{color:"#e53e3e"}}>*</span></label>
+                        <input value={form.rutCedido||""} onChange={e=>setF("rutCedido",e.target.value)} placeholder="Ej: 12.345.678-9"
+                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.rutCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                        {errors.rutCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.rutCedido}</span>}
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Depto/unidad del beneficiario <span style={{color:"#e53e3e"}}>*</span></label>
+                        <input value={form.unidadCedido||""} onChange={e=>setF("unidadCedido",e.target.value)} placeholder="Ej: Depto B2, Torre 1052"
+                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.unidadCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                        {errors.unidadCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.unidadCedido}</span>}
+                      </div>
+                      <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Teléfono <span style={{color:"#e53e3e"}}>*</span></label>
                         <PhoneInput value={form.telefonoCedido||""} onChange={v=>setF("telefonoCedido",v)} error={errors.telefonoCedido}/>
                         {errors.telefonoCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefonoCedido}</span>}
                       </div>
+
+                      {form.usoEstacionamiento==="ceder_largo"&&(
+                        <div style={{background:"#e0f2fe",borderRadius:8,padding:12,fontSize:12,color:"#0369a1",lineHeight:1.5}}>
+                          📅 El préstamo a largo plazo tiene duración de <strong>6 meses</strong> con renovación. La administración será notificada automáticamente.
+                        </div>
+                      )}
+
+                      {form.usoEstacionamiento==="ceder_dias"&&(
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Días de préstamo <span style={{color:"#e53e3e"}}>*</span></label>
+                          <div style={{background:"white",borderRadius:10,border:`1.5px solid ${errors.diasPrestamo?"#e53e3e":"#bae6fd"}`,padding:12}}>
+                            <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
+                              <input type="date" value={form.fechaPrestamo||""} onChange={e=>setF("fechaPrestamo",e.target.value)} min={new Date().toISOString().slice(0,10)}
+                                style={{padding:"8px 10px",borderRadius:8,fontSize:13,border:"1.5px solid #bae6fd",outline:"none",flex:1}}/>
+                              <button onClick={()=>{
+                                if(!form.fechaPrestamo) return;
+                                const dias=Array.isArray(form.diasPrestamo)?form.diasPrestamo:[];
+                                if(!dias.includes(form.fechaPrestamo)){setF("diasPrestamo",[...dias,form.fechaPrestamo].sort());}
+                                setF("fechaPrestamo","");
+                              }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#0369a1",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar</button>
+                            </div>
+                            {Array.isArray(form.diasPrestamo)&&form.diasPrestamo.length>0&&(
+                              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                                {form.diasPrestamo.map(d=>(
+                                  <div key={d} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,background:"#0369a1",color:"white",fontSize:11,fontWeight:600}}>
+                                    📅 {d}
+                                    <span onClick={()=>setF("diasPrestamo",(form.diasPrestamo||[]).filter(x=>x!==d))} style={{cursor:"pointer",marginLeft:2,opacity:0.8}}>✕</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {(!form.diasPrestamo||form.diasPrestamo.length===0)&&<div style={{fontSize:11,color:"#94a3b8",textAlign:"center",padding:"8px 0"}}>Selecciona una fecha y presiona + Agregar</div>}
+                          </div>
+                          {errors.diasPrestamo&&<span style={{fontSize:10,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.diasPrestamo}</span>}
+                        </div>
+                      )}
+
+                      {/* ── DECLARACIÓN INLINE ── */}
+                      <div style={{background:"#f8fafc",borderRadius:10,border:"1.5px solid #cbd5e1",padding:16}}>
+                        <div style={{fontSize:12,fontWeight:800,color:"#0f172a",marginBottom:2}}>📋 Declaración simple</div>
+                        <div style={{fontSize:11,color:"#64748b",marginBottom:12,lineHeight:1.5}}>Generada automáticamente con tus datos. Revisa antes de confirmar.</div>
+                        <div style={{background:"white",borderRadius:8,border:"1px solid #e2e8f0",padding:16,fontSize:12,color:"#374151",lineHeight:1.9,textAlign:"justify"}}>
+                          <p style={{margin:"0 0 12px"}}>
+                            En la ciudad de Viña del Mar, a <strong>{new Date().toLocaleDateString("es-CL",{day:"numeric",month:"long",year:"numeric"})}</strong>,
+                            el suscrito, <strong>{form.nombre||"_______________"}</strong>, con RUT <strong>{form.rut||"_______________"}</strong>,
+                            en mi calidad de propietario de la unidad <strong>{found?.depto||"___"}, {TORRES_LABELS[found?.torre]||found?.torre||"___"}</strong>,
+                            ubicada en el Comunidad Edificio 12 Norte de Caja de Compensación de los Empleados Particulares,
+                            RUT 56.028.260-5, manifiesto mi voluntad prestar el espacio común que se me ha designado como
+                            estacionamiento <strong>#{found?.id||"___"}</strong> a: <strong>{form.nombreCedido||"_______________"}</strong>,
+                            con RUT <strong>{form.rutCedido||"_______________"}</strong>,
+                            de la unidad <strong>{form.unidadCedido||"_______________"}</strong>.
+                          </p>
+                          {form.usoEstacionamiento==="ceder_dias"&&form.diasPrestamo?.length>0&&(
+                            <p style={{margin:"0 0 12px"}}>
+                              El préstamo se realizará por los siguientes días: <strong>{form.diasPrestamo.join(", ")}</strong>.
+                            </p>
+                          )}
+                          {form.usoEstacionamiento==="ceder_largo"&&(
+                            <p style={{margin:"0 0 12px"}}>
+                              El préstamo tendrá una duración de <strong>6 meses</strong>, con posibilidad de renovación, sujeta a validación de la Administración.
+                            </p>
+                          )}
+                          <p style={{margin:"0 0 12px"}}>
+                            A su vez, declaró tener el registro de copropietarios, con toda la documentación, solicitada al día
+                            (certificado de dominio vigente, Carnet de identidad por ambos lados del propietario, Contrato de arriendo
+                            (en el caso que corresponda), Carnet de identidad por ambos lados del arrendatario u ocupante y Ficha de
+                            registro de copropietarios) quedando sujeto la efectividad del préstamo objeto de la presente declaración
+                            a la validación de dicho cumplimento por parte de la Administración.
+                          </p>
+                          <p style={{margin:"0 0 12px"}}>
+                            Por otro lado, eximo expresamente a la Comunidad Edificio 12 Norte de Caja de Compensación de los
+                            Empleados Particulares y a su administración de cualquier responsabilidad civil o contractual que pudiera
+                            derivarse del préstamo, incluyendo, pero no limitado a, daños a terceros, a la propiedad común o a
+                            propiedades privadas.
+                          </p>
+                          <p style={{margin:"0 0 20px"}}>
+                            Me comprometo a asumir íntegramente todos los costos en caso que dicho préstamo causare daños a
+                            terceros, a la propiedad común o a propiedades privadas.
+                          </p>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginTop:8}}>
+                            {[["Firma","_______________"],["Nombre del dueño",form.nombre||"_______________"],["RUT",form.rut||"_______________"]].map(([lbl,val])=>(
+                              <div key={lbl} style={{textAlign:"center"}}>
+                                <div style={{borderBottom:"1px solid #94a3b8",paddingBottom:4,marginBottom:4,fontSize:11,color:"#374151",minHeight:24}}>{val!=="_______________"?val:""}</div>
+                                <div style={{fontSize:10,color:"#64748b",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{lbl}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
+                          <input type="checkbox" id="acepta_declaracion" checked={!!form.aceptaDeclaracion}
+                            onChange={e=>setF("aceptaDeclaracion",e.target.checked)}
+                            style={{width:16,height:16,cursor:"pointer"}}/>
+                          <label htmlFor="acepta_declaracion" style={{fontSize:12,color:"#374151",cursor:"pointer",lineHeight:1.4}}>
+                            Confirmo que la información es correcta y acepto esta declaración
+                          </label>
+                        </div>
+                        {errors.aceptaDeclaracion&&<span style={{fontSize:10,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.aceptaDeclaracion}</span>}
+                      </div>
+
+                      {/* ── CARNET ── */}
                       <div>
-                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Documento de autorización <span style={{color:"#e53e3e"}}>*</span></label>
-                        <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Adjunta la declaración simple firmada.</div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>
+                          Carnet de identidad <span style={{color:"#e53e3e"}}>*</span>
+                          <span style={{fontWeight:400,textTransform:"none",color:"#94a3b8",marginLeft:6}}>(foto o scan de quien presta)</span>
+                        </label>
                         <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:9,border:`1.5px dashed ${errors.docCedido?"#e53e3e":form.docCedido?"#0ea5e9":"#bae6fd"}`,background:form.docCedido?"#e0f2fe":"white",cursor:"pointer"}}>
-                          <span style={{fontSize:20}}>{form.docCedido?"📎":"📄"}</span>
+                          <span style={{fontSize:20}}>{form.docCedido?"🪪":"📷"}</span>
                           <div style={{flex:1}}>
-                            <div style={{fontSize:12,fontWeight:700,color:form.docCedido?"#0369a1":"#475569"}}>{form.docCedido?form.docCedido.name:"Seleccionar archivo"}</div>
-                            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>PDF, JPG, PNG — máx. 5MB</div>
+                            <div style={{fontSize:12,fontWeight:700,color:form.docCedido?"#0369a1":"#475569"}}>{form.docCedido?form.docCedido.name:"Adjuntar carnet (frente y dorso)"}</div>
+                            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>JPG, PNG, PDF — máx. 5MB</div>
                           </div>
                           {form.docCedido&&<span style={{fontSize:18}}>✅</span>}
                           <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{display:"none"}}
@@ -1614,7 +1734,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
             {step===4&&found&&(()=>{
               const sc4=SC[found.sector];
               const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario"};
-              const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cede a comunero",sin_uso:"Sin uso"};
+              const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
               return <div>
                 <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.08)",textAlign:"center",marginBottom:14}}>
                   <div style={{background:sc4.bg,padding:"32px 24px 24px"}}>
@@ -2005,7 +2125,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                 <option value="depto">Depto</option><option value="sector">Sector</option>
               </select>
               <button onClick={()=>{
-                const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cedido",sin_uso:"Sin uso"};
+                const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
                 const tipoL={propietario_residente:"Prop. residente",propietario_arriendo:"Prop. no residente",arrendatario:"Arrendatario"};
                 const rows=[["Estac.","Torre","Depto","Sector","Nombre","Email","Teléfono","Tipo","Uso","Patentes","Actualizado"]];
                 listedSpots.forEach(s=>{
@@ -2111,7 +2231,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           );
 
           const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario",sin_tipo:"Sin especificar"};
-          const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder:"Cedido a comunero",sin_uso:"Sin uso",otro:"Otro"};
+          const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso",otro:"Otro"};
           const usoColors={uso_exclusivo:"#22c55e",visitas:"#3b82f6",ceder:"#a855f7",sin_uso:"#6b7280",otro:"#f59e0b"};
           const tipoColors={propietario_residente:"#22c55e",propietario_arriendo:"#3b82f6",arrendatario:"#f59e0b",sin_tipo:"#6b7280"};
 
