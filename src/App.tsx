@@ -114,35 +114,18 @@ const backupToDrive = async (records) => {
 
 // ── GOOGLE APPS SCRIPT ──
 // ⚠️ Reemplaza esta URL con la del nuevo script ParkAdmin_AppScript.js
-const GAS_URL     = "https://script.google.com/macros/s/AKfycbyHwe-mmwWuXkn61OfQYhOBsnkqKf9V56S3pmwr5rNrQYhoWTaYE_HXZXkLicMp6hTIXQ/exec";
+const GAS_URL     = "https://script.google.com/macros/s/AKfycbyMa6MLEgh-fBscP2_UwjcuxxoN7huicj7Tkfyaj6ZS36nLXmtzJx6TwgMxDqQ9GhhvXQ/exec";
 const ADMIN_EMAIL = "com12norte@gmail.com";
 
 const sendToGAS = (data) => {
   try {
-    // Iframe method — evita CORS igual que Comprobantes
-    let iframe = document.getElementById("gas_iframe_park");
-    if(!iframe){
-      iframe = document.createElement("iframe");
-      iframe.name = "gas_iframe_park";
-      iframe.id   = "gas_iframe_park";
-      iframe.style.display = "none";
-      document.body.appendChild(iframe);
-    }
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = GAS_URL;
-    form.target = "gas_iframe_park";
-    form.style.display = "none";
-    // Enviar todos los campos como inputs hidden
-    Object.entries(data).forEach(([k,v])=>{
-      const i = document.createElement("input");
-      i.type = "hidden"; i.name = k;
-      i.value = typeof v === "object" ? JSON.stringify(v) : String(v||"");
-      form.appendChild(i);
-    });
-    document.body.appendChild(form);
-    form.submit();
-    form.remove();
+    // no-cors fetch con JSON — GAS lo lee via e.postData.contents o e.parameter
+    fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).catch(()=>{});
     console.log("✅ Enviado a GAS:", data.tipo);
   } catch(e) { console.error("❌ sendToGAS exception:", e); }
 };
