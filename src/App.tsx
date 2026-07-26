@@ -753,8 +753,8 @@ const HomeScreen = ({onGo}) => {
         <p style={{margin:"7px 0 0",fontSize:13,color:"#4a5568",fontWeight:500}}>Gestión de Estacionamientos · {SPOTS_DATA.length} espacios</p>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:390}}>
-        {card("🏠","Soy Residente","Registra tus patentes y consulta tu estacionamiento asignado","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
-        {card("🔑","Acceso Personal","Verificar patente · Administración · Conserjería","staff","linear-gradient(135deg,#111827 0%,#1f2937 100%)",210)}
+        {card("🏠","Soy Residente","Registra tus patentes, consulta tu estacionamiento asignado y reporta ocupación indebida","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
+        {card("🔑","Administración","Acceso personal · Conserjería","staff","linear-gradient(135deg,#111827 0%,#1f2937 100%)",210)}
       </div>
       <div style={{marginTop:38,display:"flex",gap:18,transform:show?"translateY(0)":"translateY(10px)",opacity:show?1:0,transition:"all .6s 350ms"}}>
         {Object.entries(SC).map(([k,sc])=>(
