@@ -344,7 +344,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const bodyH=Math.max(cI.length,cD.length)*(SH+YGAP)-YGAP;
     H=yBody+bodyH+PAD+RD;
     svg+=`<rect width="${W}" height="${H}" fill="#0f172a" rx="8"/>`;
-    svg+=roadEl(W,H,'← Salida 3 Oriente','Salida 4 Oriente →');
+    svg+=roadEl(W,H,'← Calle 12 Norte','Salida 4 Oriente →');
     svg+=`<rect x="0" y="${yGray}" width="${W}" height="${grayH}" fill="#1a2535" stroke="#1e3a5f" stroke-width="1"/>`;
     const top=[6,5,4,3,2,1],tW=top.length*(SW+G)-G,tX=(W-tW)/2;
     top.forEach((id,i)=>{svg+=spotEl(id,tX+i*(SW+G),yTopSpots,SW,SH);});
@@ -784,12 +784,20 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
     setReclamo({spot,record});
   };
 
-  const buscarPatente=()=>{
+  const buscarPatente=async()=>{
     if(!queryPat.trim())return;
     const q=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
     let res=null;
     for(const s of SPOTS_DATA){const rec=records[s.id];if(rec?.patentes?.some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q)){res={spot:s,record:rec};break;}}
-    setResult(res||"not_found");
+    if(!res){
+      // Buscar en técnicos
+      const tecs = await loadTecnicos();
+      const tec = tecs.find(t=>(t.patentes||[]).some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q));
+      if(tec) setResult({tecnico:tec});
+      else setResult("not_found");
+    } else {
+      setResult(res);
+    }
   };
   const buscarDireccion=(torreOverride,deptoOverride)=>{
     const t=torreOverride||queryTorre,d=deptoOverride||queryDepto;
@@ -961,6 +969,28 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
           <div style={{fontSize:16,fontWeight:700,color:"#92400e",marginBottom:6}}>{mode==="patente"?"Patente no encontrada":"Dirección no encontrada"}</div>
           <div style={{fontSize:12,color:"#b45309",marginBottom:16}}>{mode==="patente"?"Esta patente no está registrada.":"No existe asignación para esta combinación."}</div>
           <button onClick={reset} style={{padding:"9px 20px",borderRadius:8,border:"1.5px solid #f59e0b",background:"transparent",color:"#b45309",cursor:"pointer",fontWeight:700,fontSize:12}}>Nueva búsqueda</button>
+        </div>
+      )}
+      {result&&result!=="not_found"&&result.tecnico&&(
+        <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:"2px solid #0ea5e9",marginBottom:12}}>
+          <div style={{padding:"16px 20px",background:"#0c4a6e",display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:32}}>🔧</div>
+            <div>
+              <div style={{fontSize:11,color:"#7dd3fc",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>Técnico autorizado</div>
+              <div style={{fontSize:20,fontWeight:900,color:"white"}}>{result.tecnico.nombre}</div>
+            </div>
+          </div>
+          <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+            {result.tecnico.empresa&&<RowItem icon="🏢" label="Empresa" value={result.tecnico.empresa}/>}
+            <RowItem icon="🔑" label="Patentes autorizadas" value={(result.tecnico.patentes||[]).join(", ")}/>
+            {result.tecnico.fechaInicio&&<RowItem icon="📅" label="Desde" value={result.tecnico.fechaInicio}/>}
+            {result.tecnico.fechaFin&&<RowItem icon="📅" label="Hasta" value={result.tecnico.fechaFin}/>}
+            {result.tecnico.observaciones&&<RowItem icon="📝" label="Obs." value={result.tecnico.observaciones}/>}
+            <div style={{padding:"8px 12px",borderRadius:8,background:esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"rgba(34,197,94,.15)":"rgba(239,68,68,.15)",border:`1px solid ${esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"#22c55e50":"#ef444450"}`,textAlign:"center",fontWeight:700,fontSize:12,color:esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"#22c55e":"#ef4444"}}>
+              {esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"✅ Acceso vigente":"❌ Acceso vencido"}
+            </div>
+          </div>
+          <div style={{padding:"0 20px 16px"}}><button onClick={reset} style={{width:"100%",padding:"10px",borderRadius:9,border:"1.5px solid #1f2937",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:12,cursor:"pointer"}}>Nueva búsqueda</button></div>
         </div>
       )}
       {result&&result!=="not_found"&&result.notReg&&(
@@ -1630,6 +1660,187 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   );
 };
 
+// ── TÉCNICOS (Firestore) ──
+const esVigenteTec = (t, hoy) => !t.fechaFin || t.fechaFin >= hoy;
+const loadTecnicos = async () => {
+  try {
+    const { db, getDocs, collection, query, orderBy } = await getFirebase();
+    const snap = await getDocs(query(collection(db, "tecnicos"), orderBy("createdAt","desc")));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error("loadTecnicos:", e); return []; }
+};
+const saveTecnico = async (data) => {
+  try {
+    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
+    const ref = await addDoc(collection(db, "tecnicos"), { ...data, createdAt: serverTimestamp() });
+    return { id: ref.id, ...data };
+  } catch(e) { console.error("saveTecnico:", e); return null; }
+};
+const updateTecnico = async (id, patch) => {
+  try {
+    const { db, doc, updateDoc } = await getFirebase();
+    await updateDoc(doc(db, "tecnicos", id), patch);
+  } catch(e) { console.error("updateTecnico:", e); }
+};
+const deleteTecnico = async (id) => {
+  try {
+    const { db, doc, deleteDoc } = await getFirebase();
+    await deleteDoc(doc(db, "tecnicos", id));
+  } catch(e) { console.error("deleteTecnico:", e); }
+};
+
+// ── TÉCNICOS TAB ──
+const TecnicosTab = () => {
+  const [tecnicos,setTecnicos]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [form,setForm]=useState({nombre:"",empresa:"",patentes:"",fechaInicio:"",fechaFin:"",observaciones:""});
+  const [errors,setErrors]=useState({});
+  const [busqueda,setBusqueda]=useState("");
+
+  useEffect(()=>{ loadTecnicos().then(d=>{setTecnicos(d);setLoading(false);}); },[]);
+
+  const hoy = new Date().toISOString().slice(0,10);
+
+  const esVigente = (t) => !t.fechaFin || t.fechaFin >= hoy;
+
+  const resetForm = () => { setForm({nombre:"",empresa:"",patentes:"",fechaInicio:"",fechaFin:"",observaciones:""}); setErrors({}); setEditId(null); setShowForm(false); };
+
+  const guardar = async () => {
+    const e = {};
+    if(!form.nombre.trim()) e.nombre="Requerido";
+    if(!form.patentes.trim()) e.patentes="Ingresa al menos una patente";
+    if(Object.keys(e).length){ setErrors(e); return; }
+    const data = {
+      nombre: form.nombre.trim(),
+      empresa: form.empresa.trim(),
+      patentes: form.patentes.toUpperCase().replace(/\s+/g,"").split(",").filter(Boolean),
+      fechaInicio: form.fechaInicio || hoy,
+      fechaFin: form.fechaFin || "",
+      observaciones: form.observaciones.trim(),
+    };
+    if(editId){
+      await updateTecnico(editId, data);
+      setTecnicos(prev=>prev.map(t=>t.id===editId?{...t,...data}:t));
+    } else {
+      const nuevo = await saveTecnico(data);
+      if(nuevo) setTecnicos(prev=>[nuevo,...prev]);
+    }
+    resetForm();
+  };
+
+  const eliminar = async (id) => {
+    if(!window.confirm("¿Eliminar este técnico?")) return;
+    await deleteTecnico(id);
+    setTecnicos(prev=>prev.filter(t=>t.id!==id));
+  };
+
+  const editar = (t) => {
+    setForm({ nombre:t.nombre, empresa:t.empresa||"", patentes:(t.patentes||[]).join(", "), fechaInicio:t.fechaInicio||"", fechaFin:t.fechaFin||"", observaciones:t.observaciones||"" });
+    setEditId(t.id);
+    setShowForm(true);
+  };
+
+  const filtrados = tecnicos.filter(t =>
+    t.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    t.empresa?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    (t.patentes||[]).some(p=>p.includes(busqueda.toUpperCase()))
+  );
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+      <div style={{fontSize:13,fontWeight:700,color:"white"}}>🔧 Técnicos autorizados</div>
+      <button onClick={()=>{resetForm();setShowForm(true);}}
+        style={{padding:"8px 16px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar técnico</button>
+    </div>
+
+    {showForm&&(
+      <div style={{background:"#111827",borderRadius:14,padding:20,marginBottom:16,border:"1px solid #1f2937"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"white",marginBottom:14}}>{editId?"✏️ Editar técnico":"➕ Nuevo técnico"}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {[["nombre","Nombre completo","Ej: Juan Pérez",true],["empresa","Empresa / Contratista","Ej: Termiservicios",false]].map(([k,lbl,ph,req])=>(
+            <div key={k}>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
+              <input value={form[k]} onChange={e=>{setForm(f=>({...f,[k]:e.target.value}));setErrors(er=>({...er,[k]:""}));}} placeholder={ph}
+                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
+            </div>
+          ))}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Patentes <span style={{color:"#e53e3e"}}>*</span></label>
+            <input value={form.patentes} onChange={e=>{setForm(f=>({...f,patentes:e.target.value}));setErrors(er=>({...er,patentes:""}));}} placeholder="ABCD12, XY1234 (separadas por coma)"
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.patentes?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"monospace",boxSizing:"border-box"}}/>
+            {errors.patentes&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.patentes}</span>}
+            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>Separar con coma si tiene más de una patente</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Fecha inicio</label>
+              <input type="date" value={form.fechaInicio} onChange={e=>setForm(f=>({...f,fechaInicio:e.target.value}))}
+                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Fecha término <span style={{color:"#4b5563",fontWeight:400}}>(opcional)</span></label>
+              <input type="date" value={form.fechaFin} onChange={e=>setForm(f=>({...f,fechaFin:e.target.value}))}
+                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Observaciones</label>
+            <input value={form.observaciones} onChange={e=>setForm(f=>({...f,observaciones:e.target.value}))} placeholder="Ej: Mantención ascensores piso 3"
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={resetForm} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #1f2937",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={guardar} style={{flex:2,padding:"10px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:13,cursor:"pointer"}}>{editId?"Guardar cambios":"Registrar técnico"}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar por nombre, empresa o patente..."
+      style={{width:"100%",padding:"10px 14px",borderRadius:10,fontSize:13,border:"1px solid #1f2937",background:"#111827",color:"white",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+
+    {loading&&<div style={{textAlign:"center",padding:32,color:"#4b5563"}}>Cargando...</div>}
+    {!loading&&filtrados.length===0&&(
+      <div style={{textAlign:"center",padding:32,background:"#111827",borderRadius:12,border:"1px solid #1f2937"}}>
+        <div style={{fontSize:32,marginBottom:8}}>🔧</div>
+        <div style={{color:"#4b5563",fontSize:13}}>No hay técnicos registrados</div>
+      </div>
+    )}
+    {filtrados.map(t=>{
+      const vigente = esVigente(t);
+      return <div key={t.id} style={{background:"#111827",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${vigente?"#1f2937":"#450a0a"}`,borderLeft:`3px solid ${vigente?"#2563eb":"#7f1d1d"}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t.nombre}</div>
+            {t.empresa&&<div style={{fontSize:11,color:"#4b5563",marginTop:2}}>🏢 {t.empresa}</div>}
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{padding:"3px 8px",borderRadius:6,background:vigente?"rgba(34,197,94,.15)":"rgba(239,68,68,.15)",border:`1px solid ${vigente?"#22c55e50":"#ef444450"}`,fontSize:10,fontWeight:700,color:vigente?"#22c55e":"#ef4444"}}>
+              {vigente?"✅ Vigente":"❌ Vencido"}
+            </span>
+          </div>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+          {(t.patentes||[]).map(p=>(
+            <span key={p} style={{padding:"4px 10px",borderRadius:6,background:"#1f2937",border:"1px solid #374151",fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#60a5fa"}}>{p}</span>
+          ))}
+        </div>
+        <div style={{fontSize:11,color:"#4b5563",marginBottom:8}}>
+          {t.fechaInicio&&`Desde: ${t.fechaInicio}`}{t.fechaFin&&` · Hasta: ${t.fechaFin}`}
+          {t.observaciones&&<span style={{display:"block",marginTop:4,color:"#374151"}}>📝 {t.observaciones}</span>}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>editar(t)} style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #1f2937",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:600,cursor:"pointer"}}>✏️ Editar</button>
+          <button onClick={()=>eliminar(t.id)} style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #7f1d1d",background:"rgba(127,29,29,.2)",color:"#ef4444",fontSize:11,fontWeight:600,cursor:"pointer"}}>🗑️ Eliminar</button>
+        </div>
+      </div>;
+    })}
+  </div>;
+};
+
 // ── STAFF ──
 const StaffScreen = ({records,setRecords,onBack}) => {
   const [tab,setTab]=useState("verify");
@@ -1722,7 +1933,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         </div>
         <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#0a0f1e",borderRadius:10,padding:3}}>
-          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"]].map(([k,icon,label])=>(
+          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["tecnicos","🔧","Técnicos"]].map(([k,icon,label])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:tab===k?"#2563eb":"transparent",color:tab===k?"white":"#4b5563",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
               <span>{icon}</span><span>{label}</span>
             </button>
@@ -2020,6 +2231,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
         )}
 
         {tab==="reclamos"&&<ReclamosTab/>}
+        {tab==="tecnicos"&&<TecnicosTab/>}
       </div>
 
       {selectedSpot&&<SpotModal spot={selectedSpot} record={records[selectedSpot.id]} onClose={()=>setSelectedSpot(null)}
