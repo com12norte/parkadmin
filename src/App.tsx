@@ -114,7 +114,7 @@ const backupToDrive = async (records) => {
 
 // ── GOOGLE APPS SCRIPT ──
 // ⚠️ Reemplaza esta URL con la del nuevo script ParkAdmin_AppScript.js
-const GAS_URL     = "https://script.google.com/macros/s/AKfycbwNmOOwkhtCPJ1arp5u_5hA5HSSR1LKExcROP5IYXR3vB6BA_hicoTmI5cElbHOfeUu/exec";
+const GAS_URL     = "https://script.google.com/macros/s/AKfycbyHwe-mmwWuXkn61OfQYhOBsnkqKf9V56S3pmwr5rNrQYhoWTaYE_HXZXkLicMp6hTIXQ/exec";
 const ADMIN_EMAIL = "com12norte@gmail.com";
 
 const sendToGAS = (data) => {
