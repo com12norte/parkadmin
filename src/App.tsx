@@ -114,18 +114,17 @@ const backupToDrive = async (records) => {
 
 // ── GOOGLE APPS SCRIPT ──
 // ⚠️ Reemplaza esta URL con la del nuevo script ParkAdmin_AppScript.js
-const GAS_URL     = "https://script.google.com/macros/s/AKfycbyMa6MLEgh-fBscP2_UwjcuxxoN7huicj7Tkfyaj6ZS36nLXmtzJx6TwgMxDqQ9GhhvXQ/exec";
+const GAS_URL     = "https://script.google.com/macros/s/AKfycbyeb83b1T0N7Lt8lg4sefBl3QkvYzjO9L2um9GJEeR9KybwusnQYbf3n38xYHGvcLqpCA/exec";
 const ADMIN_EMAIL = "com12norte@gmail.com";
 
 const sendToGAS = (data) => {
   try {
-    // no-cors fetch con JSON — GAS lo lee via e.postData.contents o e.parameter
-    fetch(GAS_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).catch(()=>{});
+    const params = new URLSearchParams();
+    Object.entries(data).forEach(([k,v]) => params.append(k, String(v||"")));
+    const url = GAS_URL + "?" + params.toString();
+    // GET via imagen invisible — evita CORS completamente, GAS lo recibe en e.parameter
+    const img = new Image();
+    img.src = url;
     console.log("✅ Enviado a GAS:", data.tipo);
   } catch(e) { console.error("❌ sendToGAS exception:", e); }
 };
