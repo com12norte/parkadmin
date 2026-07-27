@@ -1785,29 +1785,33 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
 const esVigenteTec = (t, hoy) => !t.fechaFin || t.fechaFin >= hoy;
 const loadTecnicos = async () => {
   try {
-    const { db, getDocs, collection, query, orderBy } = await getFirebase();
-    const snap = await getDocs(query(collection(db, "tecnicos"), orderBy("createdAt","desc")));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const { db, getDocs, collection } = await getFirebase();
+    const snap = await getDocs(collection(db, "tecnicos"));
+    const result = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return result.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
   } catch(e) { console.error("loadTecnicos:", e); return []; }
 };
 const saveTecnico = async (data) => {
   try {
     const { db, collection, addDoc, serverTimestamp } = await getFirebase();
     const ref = await addDoc(collection(db, "tecnicos"), { ...data, createdAt: serverTimestamp() });
+    console.log("✅ Técnico guardado:", ref.id);
     return { id: ref.id, ...data };
-  } catch(e) { console.error("saveTecnico:", e); return null; }
+  } catch(e) { console.error("❌ saveTecnico error:", e); return null; }
 };
 const updateTecnico = async (id, patch) => {
   try {
     const { db, doc, updateDoc } = await getFirebase();
     await updateDoc(doc(db, "tecnicos", id), patch);
-  } catch(e) { console.error("updateTecnico:", e); }
+    console.log("✅ Técnico actualizado:", id);
+  } catch(e) { console.error("❌ updateTecnico error:", e); }
 };
 const deleteTecnico = async (id) => {
   try {
     const { db, doc, deleteDoc } = await getFirebase();
     await deleteDoc(doc(db, "tecnicos", id));
-  } catch(e) { console.error("deleteTecnico:", e); }
+    console.log("✅ Técnico eliminado:", id);
+  } catch(e) { console.error("❌ deleteTecnico error:", e); }
 };
 
 // ── TÉCNICOS TAB ──
@@ -1816,7 +1820,7 @@ const TecnicosTab = () => {
   const [loading,setLoading]=useState(true);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
-  const [form,setForm]=useState({nombre:"",empresa:"",patentes:"",fechaInicio:"",fechaFin:"",observaciones:""});
+  const [form,setForm]=useState({nombre:"",empresa:"",patentes:[],patenteInput:"",fechaInicio:"",fechaFin:"",observaciones:""});
   const [errors,setErrors]=useState({});
   const [busqueda,setBusqueda]=useState("");
 
@@ -1826,17 +1830,17 @@ const TecnicosTab = () => {
 
   const esVigente = (t) => !t.fechaFin || t.fechaFin >= hoy;
 
-  const resetForm = () => { setForm({nombre:"",empresa:"",patentes:"",fechaInicio:"",fechaFin:"",observaciones:""}); setErrors({}); setEditId(null); setShowForm(false); };
+  const resetForm = () => { setForm({nombre:"",empresa:"",patentes:[],patenteInput:"",fechaInicio:"",fechaFin:"",observaciones:""}); setErrors({}); setEditId(null); setShowForm(false); };
 
   const guardar = async () => {
     const e = {};
     if(!form.nombre.trim()) e.nombre="Requerido";
-    if(!form.patentes.trim()) e.patentes="Ingresa al menos una patente";
+    if(!Array.isArray(form.patentes)||form.patentes.length===0) e.patentes="Ingresa al menos una patente";
     if(Object.keys(e).length){ setErrors(e); return; }
     const data = {
       nombre: form.nombre.trim(),
       empresa: form.empresa.trim(),
-      patentes: form.patentes.toUpperCase().replace(/\s+/g,"").split(",").filter(Boolean),
+      patentes: form.patentes,
       fechaInicio: form.fechaInicio || hoy,
       fechaFin: form.fechaFin || "",
       observaciones: form.observaciones.trim(),
@@ -1858,7 +1862,7 @@ const TecnicosTab = () => {
   };
 
   const editar = (t) => {
-    setForm({ nombre:t.nombre, empresa:t.empresa||"", patentes:(t.patentes||[]).join(", "), fechaInicio:t.fechaInicio||"", fechaFin:t.fechaFin||"", observaciones:t.observaciones||"" });
+    setForm({ nombre:t.nombre, empresa:t.empresa||"", patentes:t.patentes||[], patenteInput:"", fechaInicio:t.fechaInicio||"", fechaFin:t.fechaFin||"", observaciones:t.observaciones||"" });
     setEditId(t.id);
     setShowForm(true);
   };
@@ -1890,10 +1894,38 @@ const TecnicosTab = () => {
           ))}
           <div>
             <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Patentes <span style={{color:"#e53e3e"}}>*</span></label>
-            <input value={form.patentes} onChange={e=>{setForm(f=>({...f,patentes:e.target.value}));setErrors(er=>({...er,patentes:""}));}} placeholder="ABCD12, XY1234 (separadas por coma)"
-              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.patentes?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"monospace",boxSizing:"border-box"}}/>
-            {errors.patentes&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.patentes}</span>}
-            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>Separar con coma si tiene más de una patente</div>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <input value={form.patenteInput||""} onChange={e=>setForm(f=>({...f,patenteInput:e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}))}
+                onKeyDown={e=>{
+                  if(e.key==="Enter"&&form.patenteInput?.trim()){
+                    const p=form.patenteInput.trim();
+                    const arr=Array.isArray(form.patentes)?form.patentes:[];
+                    if(!arr.includes(p))setForm(f=>({...f,patentes:[...arr,p],patenteInput:""}));
+                    else setForm(f=>({...f,patenteInput:""}));
+                  }
+                }}
+                placeholder="ABCD12" maxLength={8}
+                style={{flex:1,padding:"9px 12px",borderRadius:8,fontSize:14,fontFamily:"monospace",fontWeight:700,letterSpacing:2,border:`1.5px solid ${errors.patentes?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",textTransform:"uppercase"}}/>
+              <button onClick={()=>{
+                const p=(form.patenteInput||"").trim();
+                if(!p)return;
+                const arr=Array.isArray(form.patentes)?form.patentes:[];
+                if(!arr.includes(p)){setForm(f=>({...f,patentes:[...arr,p],patenteInput:""}));setErrors(er=>({...er,patentes:""}));}
+                else setForm(f=>({...f,patenteInput:""}));
+              }} style={{padding:"9px 16px",borderRadius:8,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar</button>
+            </div>
+            {Array.isArray(form.patentes)&&form.patentes.length>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+                {form.patentes.map(p=>(
+                  <div key={p} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:20,background:"#1f2937",border:"1px solid #374151"}}>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:"#60a5fa",letterSpacing:1}}>{p}</span>
+                    <span onClick={()=>setForm(f=>({...f,patentes:(f.patentes||[]).filter(x=>x!==p)}))} style={{cursor:"pointer",color:"#ef4444",fontWeight:700,fontSize:12,lineHeight:1}}>✕</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(!form.patentes||form.patentes.length===0)&&<div style={{fontSize:10,color:"#4b5563"}}>Ingresa una patente y presiona + Agregar</div>}
+            {errors.patentes&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginTop:2}}>{errors.patentes}</span>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <div>
