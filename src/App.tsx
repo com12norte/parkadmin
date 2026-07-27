@@ -114,7 +114,7 @@ const backupToDrive = async (records) => {
 
 // ── GOOGLE APPS SCRIPT ──
 // ⚠️ Reemplaza esta URL con la del nuevo script ParkAdmin_AppScript.js
-const GAS_URL     = "https://script.google.com/macros/s/AKfycbyeb83b1T0N7Lt8lg4sefBl3QkvYzjO9L2um9GJEeR9KybwusnQYbf3n38xYHGvcLqpCA/exec";
+const GAS_URL     = "https://script.google.com/macros/s/AKfycbxg_pM9eWVH3p0rmw8fbHuBXty2zahiEkCATmzFiiMLPxFvYc5mY36t1f7uFiuTw4_urw/exec";
 const ADMIN_EMAIL = "com12norte@gmail.com";
 
 const sendToGAS = (data) => {
@@ -221,7 +221,7 @@ function emptyForm() {
   return {
     torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",rut:"",
     nombrePropietario:"",emailPropietario:"",telefonoPropietario:"",rutPropietario:"",
-    usoEstacionamiento:"",nombreCedido:"",emailCedido:"",telefonoCedido:"",rutCedido:"",unidadCedido:"",docCedido:null,
+    usoEstacionamiento:"",visitasPermanentes:[],nombreCedido:"",emailCedido:"",telefonoCedido:"",rutCedido:"",unidadCedido:"",docCedido:null,
     fechaPrestamo:"",diasPrestamo:[],aceptaDeclaracion:false,
     vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]
   };
@@ -1164,6 +1164,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       nombre:form.nombre,email:form.email,telefono:form.telefono,
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
+      visitasPermanentes:(form.visitasPermanentes||[]).filter(v=>v.nombre||v.patente),
       ...((form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias")?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||"",diasPrestamo:form.diasPrestamo||[]}:{}),
       ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
       updatedAt:new Date().toISOString()
@@ -1453,7 +1454,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                 <h2 style={{margin:"0 0 6px",fontSize:16,fontWeight:800,color:"#0f172a"}}>Bloque 2: Uso del Espacio</h2>
                 <p style={{margin:"0 0 16px",fontSize:13,color:"#64748b"}}>7. ¿Cómo será utilizado el estacionamiento?</p>
                 {errors.usoEstacionamiento&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginBottom:8}}>{errors.usoEstacionamiento}</span>}
-                {radioBtn("usoEstacionamiento","uso_exclusivo","Uso exclusivo para vehículo(s) del residente.")}
+                {radioBtn("usoEstacionamiento","uso_exclusivo","Uso exclusivo para vehículo(s) del residente. También puedes registrar visitas permanentes (familiares, empleados del hogar, etc.) en el Bloque 3.")}
                 {radioBtn("usoEstacionamiento","visitas","Se utilizará principalmente para visitas.")}
                 {radioBtn("usoEstacionamiento","ceder_largo","Lo prestaré a largo plazo (renovación cada 6 meses).")}
                 {radioBtn("usoEstacionamiento","ceder_dias","Lo prestaré por día(s) — indicar fechas.")}
