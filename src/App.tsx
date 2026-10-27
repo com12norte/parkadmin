@@ -1183,18 +1183,21 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   );
 };
 
-// ── FIRESTORE SOLICITUDES ──
+// ── SUPABASE SOLICITUDES (préstamos ceder_largo) ──
 const loadSolicitudes = async () => {
   try {
-    const {db,getDocs,collection} = await getFirebase();
-    const snap = await getDocs(collection(db,"solicitudes_prestamo"));
-    return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+    const res = await sbFetch("registros?usoEstacionamiento=eq.ceder_largo&select=*");
+    const data = await res.json();
+    return Array.isArray(data) ? data.sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0)) : [];
   } catch(e){console.error("loadSolicitudes:",e);return [];}
 };
-const updateSolicitud = async (id,patch) => {
+const updateSolicitud = async (id, patch) => {
   try {
-    const {db,doc,updateDoc} = await getFirebase();
-    await updateDoc(doc(db,"solicitudes_prestamo",id),patch);
+    await sbFetch(`registros?id=eq.${id}`, {
+      method:"PATCH",
+      headers:{"Prefer":"return=representation"},
+      body:JSON.stringify(patch)
+    });
   } catch(e){console.error("updateSolicitud:",e);}
 };
 
@@ -1264,8 +1267,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
                   <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
                 </div>
                 <button onClick={async()=>{
-                  const {db,doc,updateDoc}=await getFirebase();
-                  await updateDoc(doc(db,"registros",String(id)),{estadoRegistro:"visado"});
+                  await sbFetch(`registros?id=eq.${id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado"})});
                   setRecords(prev=>({...prev,[id]:{...prev[id],estadoRegistro:"visado"}}));
                 }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:11,cursor:"pointer",flexShrink:0,marginLeft:10}}>✅ Visar</button>
               </div>
@@ -1576,8 +1578,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                   <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{fechaReg}</span>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                     {esPendiente&&<button onClick={async()=>{
-                      const {db,doc,updateDoc} = await getFirebase();
-                      await updateDoc(doc(db,"registros",String(s.id)),{estadoRegistro:"visado"});
+                      await sbFetch(`registros?id=eq.${s.id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado"})});
                       setRecords(r=>({...r,[s.id]:{...r[s.id],estadoRegistro:"visado"}}));
                     }} style={{padding:"4px 7px",borderRadius:6,border:"1.5px solid #166534",background:"rgba(22,163,74,.15)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:700}} title="Visar registro">✅</button>}
                     <button onClick={()=>setSelectedSpot(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #1e3a5f",background:"rgba(37,99,235,.12)",color:"#60a5fa",cursor:"pointer",fontSize:13}}>✏️</button>
