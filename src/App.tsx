@@ -22,6 +22,8 @@ const deleteRegistro = async (id) => {
 };
 
 // ── EMAILJS ──
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwNiZog9iqBei43v-RiEFe2xGHopqiMoQ6T223IpvcHREgclmSfRzDmq_EJ1WqRPxWILA/exec";
+
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
 const EMAILJS_KEY = "wKxD2rJHuftU7W-WE";
