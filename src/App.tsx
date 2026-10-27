@@ -1,140 +1,45 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-// ── FIREBASE CONFIG ──
-const FB_API_KEY     = "AIzaSyDwKf88v3syQn-BYlq8REkUZblkOvEHR80";
-const FB_AUTH_DOMAIN = "parkadmin-a38a0.firebaseapp.com";
-const FB_PROJECT_ID  = "parkadmin-a38a0";
-const FB_APP_ID      = "1:770524153774:web:16dde2c3d413c4ac472a3f";
+// ── SUPABASE ──
+const SUPABASE_URL = "https://qpuuggfcubsepcjwocxf.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdXVnZ2ZjdWJzZXBjandvY3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzk3ODQsImV4cCI6MjA5OTE1NTc4NH0.bTPWVT76QdNKvg9TuvMAX3TrRmfWgvKjuE1VcQWKYaM";
 
-const FB_VER = "12.16.0";
-const FB_BASE = `https://www.gstatic.com/firebasejs/${FB_VER}`;
-
-// Dynamic Firebase loader (CDN ESM → stored in window)
-let _db = null, _auth = null, _fbReady = null;
-const getFirebase = () => {
-  if (_fbReady) return _fbReady;
-  _fbReady = (async () => {
-    const { initializeApp, getApps } = await import(`${FB_BASE}/firebase-app.js`);
-    const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp } = await import(`${FB_BASE}/firebase-firestore.js`);
-    const { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`${FB_BASE}/firebase-auth.js`);
-    const app = getApps().length ? getApps()[0] : initializeApp({ apiKey:FB_API_KEY, authDomain:FB_AUTH_DOMAIN, projectId:FB_PROJECT_ID, appId:FB_APP_ID });
-    _db   = getFirestore(app);
-    _auth = getAuth(app);
-    return { db:_db, auth:_auth, doc, getDoc, getDocs, setDoc, deleteDoc, collection, addDoc, updateDoc, query, orderBy, where, serverTimestamp, signInWithEmailAndPassword, signOut, onAuthStateChanged };
-  })();
-  return _fbReady;
-};
-
-// ── DB HELPERS ──
+const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation",...(opts.headers||{})},
+  ...opts,
+});
 const loadRegistros = async () => {
-  try {
-    const { db, getDocs, collection } = await getFirebase();
-    const snap = await getDocs(collection(db, "registros"));
-    const r = {};
-    snap.forEach(d => { r[d.id] = d.data(); });
-    return r;
-  } catch(e) { console.error("loadRegistros:", e); return {}; }
+  try { const res=await sbFetch("registros?select=*"); const data=await res.json(); const r={}; (Array.isArray(data)?data:[]).forEach(x=>{r[x.id]=x;}); return r; }
+  catch(e){ return {}; }
 };
-
-const upsertRegistro = async (id, record) => {
-  try {
-    const { db, doc, setDoc, serverTimestamp } = await getFirebase();
-    await setDoc(doc(db, "registros", String(id)), { ...record, updatedAt: serverTimestamp() }, { merge: true });
-    console.log("✅ Firestore guardado:", id);
-  } catch(e) { console.error("upsertRegistro:", e); }
+const upsertRegistro = async (id,record) => {
+  try { await sbFetch("registros",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify({id,...record})}); }
+  catch(e){}
 };
-
 const deleteRegistro = async (id) => {
+  try { await sbFetch(`registros?id=eq.${id}`,{method:"DELETE"}); }
+  catch(e){}
+};
+
+// ── EMAILJS ──
+const EMAILJS_SERVICE = "service_vxhdrlx";
+const EMAILJS_TEMPLATE = "template_dgshb8a";
+const EMAILJS_KEY = "wKxD2rJHuftU7W-WE";
+
+const sendEmail = async (params) => {
   try {
-    const { db, doc, deleteDoc } = await getFirebase();
-    await deleteDoc(doc(db, "registros", String(id)));
-  } catch(e) { console.error("deleteRegistro:", e); }
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        service_id: EMAILJS_SERVICE,
+        template_id: EMAILJS_TEMPLATE,
+        user_id: EMAILJS_KEY,
+        template_params: params,
+      }),
+    });
+  } catch(e) { console.error("Email error:",e); }
 };
-
-// ── RECLAMOS ──
-const loadReclamos = async () => {
-  try {
-    const { db, getDocs, collection, query, orderBy } = await getFirebase();
-    const snap = await getDocs(query(collection(db, "reclamos"), orderBy("createdAt", "desc")));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e) { console.error("loadReclamos:", e); return []; }
-};
-
-const insertReclamo = async (reclamo) => {
-  try {
-    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
-    const ref = await addDoc(collection(db, "reclamos"), { ...reclamo, createdAt: serverTimestamp() });
-    return { id: ref.id, ...reclamo };
-  } catch(e) { console.error("insertReclamo:", e); return null; }
-};
-
-const updateReclamo = async (id, patch) => {
-  try {
-    const { db, doc, updateDoc } = await getFirebase();
-    await updateDoc(doc(db, "reclamos", id), patch);
-  } catch(e) { console.error("updateReclamo:", e); }
-};
-
-// ── HISTORIAL ──
-const loadHistorial = async (spotId) => {
-  try {
-    const { db, getDocs, collection, query, orderBy, where } = await getFirebase();
-    const snap = await getDocs(query(collection(db, "historial"), where("spot_id","==",Number(spotId)), orderBy("createdAt","desc")));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e) { console.error("loadHistorial:", e); return []; }
-};
-
-const addHistorial = async (spotId, accion, detalle) => {
-  try {
-    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
-    await addDoc(collection(db, "historial"), { spot_id: Number(spotId), accion, detalle, createdAt: serverTimestamp() });
-  } catch(e) { console.error("addHistorial:", e); }
-};
-
-// ── GOOGLE DRIVE BACKUP ──
-const backupToDrive = async (records) => {
-  try {
-    const token = window._gToken;
-    if (!token) return;
-    const filename = `parkadmin_backup_${new Date().toISOString().slice(0,10)}.json`;
-    const content  = JSON.stringify(records, null, 2);
-    // Check if file exists
-    const search = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${filename}'&spaces=drive`, { headers: { Authorization: `Bearer ${token}` } });
-    const found  = await search.json();
-    const fileId = found.files?.[0]?.id;
-    const blob   = new Blob([content], { type: "application/json" });
-    const form   = new FormData();
-    form.append("metadata", new Blob([JSON.stringify({ name: filename, mimeType: "application/json" })], { type: "application/json" }));
-    form.append("file", blob);
-    const url    = fileId ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart` : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-    await fetch(url, { method: fileId ? "PATCH" : "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-    console.log("✅ Backup Drive:", filename);
-  } catch(e) { console.warn("Drive backup failed (non-critical):", e); }
-};
-
-// ── GOOGLE APPS SCRIPT ──
-// ⚠️ Reemplaza esta URL con la del nuevo script ParkAdmin_AppScript.js
-const GAS_URL     = "https://script.google.com/macros/s/AKfycbxg_pM9eWVH3p0rmw8fbHuBXty2zahiEkCATmzFiiMLPxFvYc5mY36t1f7uFiuTw4_urw/exec";
-const ADMIN_EMAIL = "com12norte@gmail.com";
-
-const sendToGAS = (data) => {
-  try {
-    const params = new URLSearchParams();
-    Object.entries(data).forEach(([k,v]) => params.append(k, String(v||"")));
-    const url = GAS_URL + "?" + params.toString();
-    // GET via imagen invisible — evita CORS completamente, GAS lo recibe en e.parameter
-    const img = new Image();
-    img.src = url;
-    console.log("✅ Enviado a GAS:", data.tipo);
-  } catch(e) { console.error("❌ sendToGAS exception:", e); }
-};
-
-// Alias para compatibilidad con llamadas existentes
-const sendEmail = ({ to_email, subject, params }) => {
-  if(params) sendToGAS({...params, tipo:"registro"});
-};
-
-
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
   {id:41,torre:"1080",depto:"A1",sector:1,gx:1,gy:2},{id:46,torre:"1038",depto:"A1",sector:1,gx:1,gy:3},
@@ -149,11 +54,11 @@ const SPOTS_DATA = [
   {id:57,torre:"1060",depto:"G7",sector:1,gx:7,gy:1},{id:42,torre:"1036",depto:"G7",sector:1,gx:7,gy:2},
   {id:55,torre:"1038",depto:"G7",sector:1,gx:7,gy:3},{id:61,torre:"1080",depto:"H8",sector:1,gx:8,gy:0},
   {id:52,torre:"1060",depto:"H8",sector:1,gx:8,gy:1},{id:44,torre:"1036",depto:"H8",sector:1,gx:8,gy:2},
-  {id:33,torre:"1052",depto:"B2",sector:2,gx:2,gy:0},{id:38,torre:"1052",depto:"G7",sector:2,gx:2,gy:1},
+  {id:33,torre:"1052",depto:"B2",sector:2,gx:2,gy:0},{id:38,torre:"1038",depto:"B2",sector:2,gx:2,gy:1},
   {id:27,torre:"1038",depto:"C3",sector:2,gx:3,gy:0},{id:28,torre:"1052",depto:"C3",sector:2,gx:3,gy:1},
   {id:37,torre:"1038",depto:"D4",sector:2,gx:4,gy:0},{id:29,torre:"1052",depto:"D4",sector:2,gx:4,gy:1},
   {id:36,torre:"1038",depto:"E5",sector:2,gx:5,gy:0},{id:32,torre:"1052",depto:"F6",sector:2,gx:6,gy:0},
-  {id:31,torre:"1036",depto:"F6",sector:2,gx:6,gy:1},{id:35,torre:"1038",depto:"B2",sector:2,gx:7,gy:0},
+  {id:31,torre:"1036",depto:"F6",sector:2,gx:6,gy:1},{id:35,torre:"1052",depto:"G7",sector:2,gx:7,gy:0},
   {id:30,torre:"1052",depto:"H8",sector:2,gx:8,gy:0},{id:34,torre:"1038",depto:"H8",sector:2,gx:8,gy:1},
   {id:1,torre:"1081",depto:"A1",sector:3,gx:1,gy:0},{id:12,torre:"1061",depto:"A1",sector:3,gx:1,gy:1},
   {id:21,torre:"1052",depto:"A1",sector:3,gx:1,gy:2},{id:6,torre:"1054",depto:"A1",sector:3,gx:1,gy:3},
@@ -193,36 +98,17 @@ const DEPTOS_ALL = ["A1","B2","C3","D4","E5","E6","F5","F6","G7","H8"];
 
 const validarTelefono = (tel) => {
   if(!tel?.trim()) return null;
-  const digits = tel.replace(/\D/g,'');
-  if(digits.length !== 9) return "Debe tener 9 dígitos después del +56";
-  if(!/^9\d{8}$/.test(digits)) return "Debe comenzar con 9 (móvil chileno)";
-  if(/^(\d)\1{8}$/.test(digits)) return "Ingresa un número real";
-  if(["912345678","987654321","900000000"].includes(digits)) return "Ingresa un número real";
+  const clean = tel.replace(/[\s\-\+\(\)]/g,'').replace(/^56/,'');
+  if(!/^9\d{8}$/.test(clean)) return "Debe ser móvil chileno (ej: 9 1234 5678)";
+  if(/^(\d)\1{8}$/.test(clean)) return "Ingresa un número real";
+  if(["912345678","987654321","900000000"].includes(clean)) return "Ingresa un número real";
   return null;
-};
-
-// Campo de teléfono con +56 fijo
-const PhoneInput = ({value, onChange, error, placeholder="9 1234 5678"}) => {
-  const handleChange = (e) => {
-    // Solo permitir dígitos, espacios y guiones
-    const raw = e.target.value.replace(/[^\d\s\-]/g,'');
-    onChange(raw);
-  };
-  return (
-    <div style={{display:"flex",border:`1.5px solid ${error?"#e53e3e":"#e2e8f0"}`,borderRadius:8,overflow:"hidden",background:"white"}}>
-      <div style={{padding:"9px 10px",background:"#f1f5f9",borderRight:"1.5px solid #e2e8f0",fontSize:13,fontWeight:700,color:"#475569",whiteSpace:"nowrap",flexShrink:0}}>+56</div>
-      <input value={value} onChange={handleChange} placeholder={placeholder} maxLength={12} inputMode="numeric"
-        style={{flex:1,padding:"9px 11px",fontSize:13,border:"none",outline:"none",fontFamily:"monospace",background:"white",minWidth:0}}/>
-    </div>
-  );
 };
 
 function emptyForm() {
   return {
-    torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",rut:"",
-    nombrePropietario:"",emailPropietario:"",telefonoPropietario:"",rutPropietario:"",
-    usoEstacionamiento:"",visitasPermanentes:[],nombreCedido:"",emailCedido:"",telefonoCedido:"",rutCedido:"",unidadCedido:"",docCedido:null,
-    fechaPrestamo:"",diasPrestamo:[],aceptaDeclaracion:false,
+    torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",
+    usoEstacionamiento:"",nombreCedido:"",rutCedido:"",emailCedido:"",telefonoCedido:"",torreCedido:"",deptoCedido:"",docCedido:null,
     vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]
   };
 }
@@ -243,13 +129,13 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const usoColor={
       uso_exclusivo:'#14532d',
       visitas:'#1e3a5f',
-      ceder:'#4c1d95',
+      ceder_largo:'#4c1d95',
       sin_uso:'#292524',
     };
     const usoAccent={
       uso_exclusivo:'#22c55e',
       visitas:'#3b82f6',
-      ceder:'#a855f7',
+      ceder_largo:'#a855f7',
       sin_uso:'#78716c',
     };
     const uso=rec?.usoEstacionamiento||'uso_exclusivo';
@@ -345,7 +231,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const bodyH=Math.max(cI.length,cD.length)*(SH+YGAP)-YGAP;
     H=yBody+bodyH+PAD+RD;
     svg+=`<rect width="${W}" height="${H}" fill="#0f172a" rx="8"/>`;
-    svg+=roadEl(W,H,'← Calle 12 Norte','Salida 4 Oriente →');
+    svg+=roadEl(W,H,'← Salida 3 Oriente','Salida 4 Oriente →');
     svg+=`<rect x="0" y="${yGray}" width="${W}" height="${grayH}" fill="#1a2535" stroke="#1e3a5f" stroke-width="1"/>`;
     const top=[6,5,4,3,2,1],tW=top.length*(SW+G)-G,tX=(W-tW)/2;
     top.forEach((id,i)=>{svg+=spotEl(id,tX+i*(SW+G),yTopSpots,SW,SH);});
@@ -518,139 +404,6 @@ const ConfirmDialog = ({msg,onConfirm,onCancel}) => (
   </div>
 );
 
-// ── ReclamoModal ──
-const ReclamoModal = ({spot,record,onClose,onSent}) => {
-  const [patenteIntrusa,setPatenteIntrusa]=useState("");
-  const [descripcion,setDescripcion]=useState("");
-  const [error,setError]=useState("");
-  const [sending,setSending]=useState(false);
-
-  const enviar=async()=>{
-    if(!descripcion.trim()){setError("Describe brevemente la situación");return;}
-    setSending(true);
-    const reclamo={
-      spot_id:spot.id,
-      torre:spot.torre,
-      depto:spot.depto,
-      sector:spot.sector,
-      nombre_residente:record?.nombre||record?.propietario||"—",
-      patente_intrusa:patenteIntrusa.trim().toUpperCase().replace(/[^A-Z0-9]/g,"")||null,
-      descripcion:descripcion.trim(),
-      estado:"pendiente",
-    };
-    await insertReclamo(reclamo);
-    sendToGAS({
-      tipo: "reclamo",
-      nombre_residente: reclamo.nombre_residente,
-      torre: TORRES_LABELS[spot.torre]||spot.torre,
-      depto: spot.depto,
-      spot_id: spot.id,
-      sector: SECTOR_NAMES[spot.sector],
-      patente_intrusa: reclamo.patente_intrusa||"",
-      descripcion: reclamo.descripcion,
-    });
-    setSending(false);
-    onSent&&onSent();
-    onClose();
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16,backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"white",borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.5)",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{padding:"18px 20px",background:"#fef2f2",borderBottom:"1px solid #fecaca"}}>
-          <div style={{fontSize:16,fontWeight:800,color:"#b91c1c"}}>⚠️ Reportar ocupación indebida</div>
-          <div style={{fontSize:12,color:"#7f1d1d",marginTop:2}}>Estacionamiento #{spot.id} · Torre {spot.torre} · {spot.depto}</div>
-        </div>
-        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
-          <div>
-            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Patente del vehículo intruso <span style={{fontWeight:400,textTransform:"none",color:"#94a3b8"}}>(opcional)</span></label>
-            <input value={patenteIntrusa} onChange={e=>setPatenteIntrusa(e.target.value)} placeholder="Ej: ABCD12" maxLength={8}
-              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:15,fontWeight:800,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"monospace",letterSpacing:2,textTransform:"uppercase",boxSizing:"border-box"}}/>
-          </div>
-          <div>
-            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Descripción <span style={{color:"#e53e3e"}}>*</span></label>
-            <textarea value={descripcion} onChange={e=>{setDescripcion(e.target.value);setError("");}} placeholder="Describe lo que está ocurriendo..." rows={4}
-              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${error?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
-            {error&&<span style={{fontSize:10,color:"#e53e3e"}}>{error}</span>}
-          </div>
-        </div>
-        <div style={{padding:"0 20px 20px",display:"flex",gap:8}}>
-          <button onClick={onClose} style={{flex:1,padding:"11px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-          <button onClick={enviar} disabled={sending} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:sending?"#fca5a5":"#dc2626",color:"white",fontWeight:800,fontSize:13,cursor:sending?"default":"pointer"}}>{sending?"Enviando...":"Enviar reclamo"}</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ── ReclamosTab (staff) ──
-const ReclamosTab = () => {
-  const [reclamos2,setReclamos2]=useState([]);
-  const [loadingR,setLoadingR]=useState(true);
-  const [filtroEstado,setFiltroEstado]=useState("pendiente");
-
-  const refresh=()=>{setLoadingR(true);loadReclamos().then(d=>{setReclamos2(d);setLoadingR(false);});};
-
-  useEffect(()=>{refresh();},[]);
-
-  const estadoColor={pendiente:"#f59e0b",atendido:"#22c55e",descartado:"#6b7280"};
-  const estadoLabel={pendiente:"Pendiente",atendido:"Atendido",descartado:"Descartado"};
-
-  const marcar=async(id,estado)=>{
-    await updateReclamo(id,{estado});
-    setReclamos2(prev=>prev.map(x=>x.id===id?{...x,estado}:x));
-  };
-
-  const listados=filtroEstado==="todos"?reclamos2:reclamos2.filter(r=>r.estado===filtroEstado);
-
-  return <div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-      <div style={{fontSize:13,fontWeight:700,color:"white"}}>⚠️ Reclamos de residentes</div>
-      <div style={{display:"flex",gap:6,alignItems:"center"}}>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}
-          style={{padding:"6px 8px",borderRadius:7,fontSize:11,border:"1px solid #1f2937",background:"#0a0f1e",color:"white",cursor:"pointer"}}>
-          <option value="todos">Todos</option>
-          <option value="pendiente">Pendientes</option>
-          <option value="atendido">Atendidos</option>
-          <option value="descartado">Descartados</option>
-        </select>
-        <button onClick={refresh} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #1f2937",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>↺ Actualizar</button>
-      </div>
-    </div>
-    {loadingR&&<div style={{textAlign:"center",padding:32,color:"#4b5563"}}>Cargando...</div>}
-    {!loadingR&&listados.length===0&&(
-      <div style={{textAlign:"center",padding:32,background:"#111827",borderRadius:12,border:"1px solid #1f2937"}}>
-        <div style={{fontSize:32,marginBottom:8}}>✅</div>
-        <div style={{color:"#4b5563",fontSize:13}}>No hay reclamos {filtroEstado!=="todos"?estadoLabel[filtroEstado]?.toLowerCase():""}</div>
-      </div>
-    )}
-    {listados.map(r=>(
-      <div key={r.id} style={{background:"#111827",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${estadoColor[r.estado]||"#1f2937"}30`,borderLeft:`3px solid ${estadoColor[r.estado]||"#1f2937"}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:"white"}}>Estac. #{r.spot_id} · {TORRES_LABELS[r.torre]||r.torre} {r.depto}</div>
-            <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{r.nombre_residente} · {r.created_at?new Date(r.created_at).toLocaleString("es-CL"):""}</div>
-          </div>
-          <div style={{padding:"3px 8px",borderRadius:6,background:(estadoColor[r.estado]||"#6b7280")+"20",border:`1px solid ${estadoColor[r.estado]||"#6b7280"}50`,fontSize:10,fontWeight:700,color:estadoColor[r.estado]||"#6b7280",whiteSpace:"nowrap"}}>
-            {estadoLabel[r.estado]||r.estado}
-          </div>
-        </div>
-        {r.patente_intrusa&&<div style={{fontSize:11,color:"#f87171",marginBottom:6}}>🚗 Patente intrusa: <strong style={{fontFamily:"monospace",letterSpacing:1}}>{r.patente_intrusa}</strong></div>}
-        <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,marginBottom:10}}>{r.descripcion}</div>
-        <div style={{display:"flex",gap:6}}>
-          {r.estado==="pendiente"&&<>
-            <button onClick={()=>marcar(r.id,"atendido")}
-              style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #22c55e",background:"rgba(34,197,94,.1)",color:"#22c55e",fontSize:11,fontWeight:700,cursor:"pointer"}}>✅ Marcar atendido</button>
-            <button onClick={()=>marcar(r.id,"descartado")}
-              style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #6b7280",background:"rgba(107,114,128,.1)",color:"#6b7280",fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Descartar</button>
-          </>}
-          {r.estado!=="pendiente"&&<div style={{fontSize:11,color:"#334155"}}>Resuelto</div>}
-        </div>
-      </div>
-    ))}
-  </div>;
-};
-
 // ── INACTIVIDAD ──
 const INACTIVITY_MINUTES = 15;
 
@@ -671,6 +424,7 @@ const useInactivity = (onTimeout) => {
     };
   }, [reset]);
 };
+let loginInProgress = false;
 
 // ── STAFF LOGIN ──
 const StaffLogin = ({onSuccess,onBack}) => {
@@ -678,26 +432,22 @@ const StaffLogin = ({onSuccess,onBack}) => {
   const [pass,setPass]=useState("");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
+  useEffect(()=>{loginInProgress=false;},[]);
 
   const login=async()=>{
+    if(loginInProgress)return;
     if(!email.trim()||!pass.trim()){setError("Completa todos los campos.");return;}
-    setLoading(true); setError("");
-    try {
-      const { auth, signInWithEmailAndPassword } = await getFirebase();
-      const result = await signInWithEmailAndPassword(auth, email.trim(), pass);
-      onSuccess(result.user);
-    } catch(e) {
-      console.error("Login error:", e);
-      if(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found")
-        setError("Correo o contraseña incorrectos.");
-      else if(e.code==="auth/too-many-requests")
-        setError("Demasiados intentos. Espera unos minutos.");
-      else if(e.code==="auth/unauthorized-domain")
-        setError("Dominio no autorizado. Agrégalo en Firebase → Authentication → Settings.");
-      else
-        setError("Error al iniciar sesión: "+(e.message||e.code));
-      setLoading(false);
-    }
+    loginInProgress=true; setLoading(true); setError("");
+    try{
+      const res=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`},
+        body:JSON.stringify({email:email.trim(),password:pass}),
+      });
+      const data=await res.json();
+      if(data.access_token){loginInProgress=false;onSuccess();}
+      else{setError(data.error_description||data.msg||"Correo o contraseña incorrectos.");loginInProgress=false;setLoading(false);}
+    }catch(e){setError("Error de conexión.");loginInProgress=false;setLoading(false);}
   };
 
   return (
@@ -713,12 +463,12 @@ const StaffLogin = ({onSuccess,onBack}) => {
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
-              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="correo@ejemplo.com"
+              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} placeholder="correo@ejemplo.com"
                 style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
-              <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="••••••••"
+              <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}} placeholder="••••••••"
                 style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
@@ -753,8 +503,8 @@ const HomeScreen = ({onGo}) => {
         <p style={{margin:"7px 0 0",fontSize:13,color:"#4a5568",fontWeight:500}}>Gestión de Estacionamientos · {SPOTS_DATA.length} espacios</p>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:390}}>
-        {card("🏠","Soy Residente","Registra tus patentes, consulta tu estacionamiento asignado y reporta ocupación indebida","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
-        {card("🔑","Administración","Acceso personal · Conserjería","staff","linear-gradient(135deg,#111827 0%,#1f2937 100%)",210)}
+        {card("🏠","Soy Residente","Registra tus patentes y consulta tu estacionamiento asignado","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
+        {card("🔑","Acceso Personal","Verificar patente · Administración · Conserjería","staff","linear-gradient(135deg,#111827 0%,#1f2937 100%)",210)}
       </div>
       <div style={{marginTop:38,display:"flex",gap:18,transform:show?"translateY(0)":"translateY(10px)",opacity:show?1:0,transition:"all .6s 350ms"}}>
         {Object.entries(SC).map(([k,sc])=>(
@@ -769,161 +519,31 @@ const HomeScreen = ({onGo}) => {
 };
 
 // ── QUERY TAB ──
-const QueryTab = ({records, reportMode=false, onReportDone}) => {
+const QueryTab = ({records}) => {
   const [mode,setMode]=useState("patente");
   const [queryPat,setQueryPat]=useState("");
   const [queryTorre,setQueryTorre]=useState("");
   const [queryDepto,setQueryDepto]=useState("");
   const [result,setResult]=useState(null);
-  const [reclamo,setReclamo]=useState(null);
-  const [toast,setToast]=useState(null);
-  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);};
   const deptosFiltrados=queryTorre?DEPTOS_ALL.filter(d=>BY_TD[`${queryTorre}-${d}`]):[];
 
-  // Auto-open reclamo modal when found in reportMode
-  const openReclamo=(spot,record)=>{
-    setReclamo({spot,record});
-  };
-
-  const buscarPatente=async()=>{
+  const buscarPatente=()=>{
     if(!queryPat.trim())return;
     const q=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
     let res=null;
     for(const s of SPOTS_DATA){const rec=records[s.id];if(rec?.patentes?.some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q)){res={spot:s,record:rec};break;}}
-    if(!res){
-      // Buscar en técnicos
-      const tecs = await loadTecnicos();
-      const tec = tecs.find(t=>(t.patentes||[]).some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q));
-      if(tec) setResult({tecnico:tec});
-      else setResult("not_found");
-    } else {
-      setResult(res);
-    }
+    setResult(res||"not_found");
   };
-  const buscarDireccion=(torreOverride,deptoOverride)=>{
-    const t=torreOverride||queryTorre,d=deptoOverride||queryDepto;
-    if(!t||!d)return;
-    const spot=BY_TD[`${t}-${d}`];
+  const buscarDireccion=()=>{
+    if(!queryTorre||!queryDepto)return;
+    const spot=BY_TD[`${queryTorre}-${queryDepto}`];
     if(!spot){setResult("not_found");return;}
     const rec=records[spot.id];
     if(!rec){setResult({spot,notReg:true});return;}
-    const res={spot,record:rec};
-    setResult(res);
-    if(reportMode) openReclamo(spot,rec);
+    setResult({spot,record:rec});
   };
   const reset=()=>{setResult(null);setQueryPat("");setQueryTorre("");setQueryDepto("");};
 
-  const [notified,setNotified]=useState(false);
-  const buscarReporte=()=>{
-    if(!queryPat.trim())return;
-    const q=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
-    let res=null;
-    for(const s of SPOTS_DATA){const rec=records[s.id];if(rec?.patentes?.some(p=>p.toUpperCase().replace(/[^A-Z0-9]/g,"")===q)){res={spot:s,record:rec};break;}}
-    if(res){setResult(res);}
-    else{setResult("not_found");}
-  };
-  const notificarAdmin=()=>{
-    const patente=queryPat.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
-    sendEmail({
-      to_email: ADMIN_EMAIL,
-      subject: `⚠️ Patente no registrada · ${patente}`,
-      params: {
-        tipo: "⚠️ Alerta: Patente no registrada",
-        nombre: "Residente no identificado",
-        patentes: patente,
-        uso: "Posible ocupación indebida — patente no registrada en el sistema",
-        fecha: new Date().toLocaleString("es-CL"),
-      },
-    });
-    setNotified(true);
-    showToast("Administración notificada","info");
-  };
-
-  // ── REPORT MODE: patente-first flow ──
-  if(reportMode){
-    return (
-      <div>
-        <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",gap:12,alignItems:"flex-start"}}>
-          <span style={{fontSize:22,flexShrink:0}}>⚠️</span>
-          <div>
-            <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:2}}>Reportar ocupación indebida</div>
-            <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>Ingresa tu patente para identificar tu estacionamiento y enviar el reclamo.</div>
-          </div>
-        </div>
-
-        {!result&&(
-          <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
-            <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Tu patente <span style={{color:"#e53e3e"}}>*</span></label>
-            <div style={{display:"flex",gap:10}}>
-              <input value={queryPat} onChange={e=>{setQueryPat(e.target.value);setResult(null);setNotified(false);}} onKeyDown={e=>e.key==="Enter"&&buscarReporte()} placeholder="ABCD12" maxLength={8}
-                style={{flex:1,padding:"14px 16px",borderRadius:10,fontSize:20,fontWeight:900,border:"2px solid #fecaca",background:"#fff5f5",color:"#0f172a",outline:"none",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:3}}/>
-              <button onClick={buscarReporte}
-                style={{padding:"14px 20px",borderRadius:10,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Buscar</button>
-            </div>
-          </div>
-        )}
-
-        {result==="not_found"&&!notified&&(
-          <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
-            <div style={{textAlign:"center",marginBottom:16}}>
-              <div style={{fontSize:36,marginBottom:8}}>❓</div>
-              <div style={{fontSize:15,fontWeight:800,color:"#0f172a",marginBottom:4}}>Patente no registrada</div>
-              <div style={{fontSize:12,color:"#64748b",lineHeight:1.5,marginBottom:4}}>La patente <strong style={{fontFamily:"monospace",letterSpacing:1}}>{queryPat.toUpperCase()}</strong> no está en el sistema.</div>
-              <div style={{fontSize:12,color:"#64748b",lineHeight:1.5}}>¿Igualmente hay un vehículo no autorizado en tu estacionamiento? Podemos notificar a administración.</div>
-            </div>
-            <button onClick={notificarAdmin}
-              style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8}}>
-              📢 Notificar a administración
-            </button>
-            <button onClick={()=>{setResult(null);setQueryPat("");setNotified(false);}}
-              style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>
-              ← Intentar con otra patente
-            </button>
-          </div>
-        )}
-
-        {result==="not_found"&&notified&&(
-          <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:16,padding:28,textAlign:"center"}}>
-            <div style={{fontSize:36,marginBottom:8}}>✅</div>
-            <div style={{fontSize:15,fontWeight:800,color:"#166534",marginBottom:6}}>Administración notificada</div>
-            <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>El equipo de administración fue alertado y revisará la situación a la brevedad.</div>
-            <button onClick={()=>{onReportDone&&onReportDone();}} style={{marginTop:16,padding:"10px 24px",borderRadius:9,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Volver al inicio</button>
-          </div>
-        )}
-
-        {result&&result!=="not_found"&&(()=>{
-          const {spot,record}=result,sc5=SC[spot.sector];
-          return <div>
-            <div style={{background:sc5.bg,borderRadius:16,overflow:"hidden",marginBottom:14,boxShadow:"0 4px 16px rgba(0,0,0,.15)"}}>
-              <div style={{padding:"16px 20px",background:"rgba(255,255,255,.08)",borderBottom:"1px solid rgba(255,255,255,.1)",display:"flex",alignItems:"center",gap:12}}>
-                <div style={{fontSize:32}}>✅</div>
-                <div>
-                  <div style={{fontSize:10,color:sc5.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>Estacionamiento encontrado</div>
-                  <div style={{fontSize:20,fontWeight:900,fontFamily:"monospace",color:"white"}}>#{spot.id}</div>
-                </div>
-              </div>
-              <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
-                <RowItem icon="📍" label="Sector" value={SECTOR_NAMES[spot.sector]}/>
-                <RowItem icon="🏢" label="Torre" value={TORRES_LABELS[spot.torre]||spot.torre}/>
-                <RowItem icon="🏠" label="Departamento" value={spot.depto}/>
-                <RowItem icon="👤" label="Registrado a nombre de" value={record.nombre||"—"}/>
-              </div>
-            </div>
-            <button onClick={()=>openReclamo(spot,record)}
-              style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(220,38,38,.4)"}}>
-              ⚠️ Reportar ocupación indebida
-            </button>
-            <button onClick={()=>{setResult(null);setQueryPat("");}} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Buscar otra patente</button>
-          </div>;
-        })()}
-
-        {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>{setReclamo(null);reset();}} onSent={()=>{showToast("Reclamo enviado a administración","info");setTimeout(()=>onReportDone&&onReportDone(),1800);}}/>}
-        {toast&&<Toast msg={toast.msg} type={toast.type}/>}
-      </div>
-    );
-  }
-
-  // ── NORMAL QUERY MODE ──
   return (
     <div>
       <div style={{display:"flex",gap:2,background:"#dde3ed",borderRadius:10,padding:3,marginBottom:16}}>
@@ -957,7 +577,7 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
               <option value="">— Selecciona letra/block —</option>
               {deptosFiltrados.map(d=><option key={d} value={d}>{d}</option>)}
             </select>
-            <button onClick={()=>buscarDireccion()} disabled={!queryTorre||!queryDepto}
+            <button onClick={buscarDireccion} disabled={!queryTorre||!queryDepto}
               style={{padding:"12px",borderRadius:10,border:"none",background:queryTorre&&queryDepto?"#2563eb":"#cbd5e1",color:"white",fontWeight:800,fontSize:14,cursor:queryTorre&&queryDepto?"pointer":"not-allowed"}}>
               Ver Estacionamiento
             </button>
@@ -970,28 +590,6 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
           <div style={{fontSize:16,fontWeight:700,color:"#92400e",marginBottom:6}}>{mode==="patente"?"Patente no encontrada":"Dirección no encontrada"}</div>
           <div style={{fontSize:12,color:"#b45309",marginBottom:16}}>{mode==="patente"?"Esta patente no está registrada.":"No existe asignación para esta combinación."}</div>
           <button onClick={reset} style={{padding:"9px 20px",borderRadius:8,border:"1.5px solid #f59e0b",background:"transparent",color:"#b45309",cursor:"pointer",fontWeight:700,fontSize:12}}>Nueva búsqueda</button>
-        </div>
-      )}
-      {result&&result!=="not_found"&&result.tecnico&&(
-        <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:"2px solid #0ea5e9",marginBottom:12}}>
-          <div style={{padding:"16px 20px",background:"#0c4a6e",display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:32}}>🔧</div>
-            <div>
-              <div style={{fontSize:11,color:"#7dd3fc",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>Técnico autorizado</div>
-              <div style={{fontSize:20,fontWeight:900,color:"white"}}>{result.tecnico.nombre}</div>
-            </div>
-          </div>
-          <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
-            {result.tecnico.empresa&&<RowItem icon="🏢" label="Empresa" value={result.tecnico.empresa}/>}
-            <RowItem icon="🔑" label="Patentes autorizadas" value={(result.tecnico.patentes||[]).join(", ")}/>
-            {result.tecnico.fechaInicio&&<RowItem icon="📅" label="Desde" value={result.tecnico.fechaInicio}/>}
-            {result.tecnico.fechaFin&&<RowItem icon="📅" label="Hasta" value={result.tecnico.fechaFin}/>}
-            {result.tecnico.observaciones&&<RowItem icon="📝" label="Obs." value={result.tecnico.observaciones}/>}
-            <div style={{padding:"8px 12px",borderRadius:8,background:esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"rgba(34,197,94,.15)":"rgba(239,68,68,.15)",border:`1px solid ${esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"#22c55e50":"#ef444450"}`,textAlign:"center",fontWeight:700,fontSize:12,color:esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"#22c55e":"#ef4444"}}>
-              {esVigenteTec(result.tecnico,new Date().toISOString().slice(0,10))?"✅ Acceso vigente":"❌ Acceso vencido"}
-            </div>
-          </div>
-          <div style={{padding:"0 20px 16px"}}><button onClick={reset} style={{width:"100%",padding:"10px",borderRadius:9,border:"1.5px solid #1f2937",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:12,cursor:"pointer"}}>Nueva búsqueda</button></div>
         </div>
       )}
       {result&&result!=="not_found"&&result.notReg&&(
@@ -1054,16 +652,12 @@ const QueryTab = ({records, reportMode=false, onReportDone}) => {
           </button>
         </div>;
       })()}
-      {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>setReclamo(null)} onSent={()=>showToast("Reclamo enviado a administración","info")}/>}
-      {toast&&<Toast msg={toast.msg} type={toast.type}/>}
     </div>
   );
 };
 
 // ── RESIDENT ──
 const ResidentScreen = ({records,setRecords,onBack}) => {
-  const [entered,setEntered]=useState(false);
-  const [reportMode,setReportMode]=useState(false);
   const [tab,setTab]=useState("form");
   const [toast,setToast]=useState(null);
   const [form,setFormState]=useState(emptyForm());
@@ -1072,8 +666,6 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   const [errors,setErrors]=useState({});
   const [emailInput,setEmailInput]=useState("");
   const [isEditing,setIsEditing]=useState(false);
-  const [reglamentoExpanded,setReglamentoExpanded]=useState(false);
-  const [aceptaReglamento,setAceptaReglamento]=useState(false);
 
   const [reclamo,setReclamo]=useState(null); // {spot, record}
 
@@ -1087,12 +679,8 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
     setFound(spot);
     const rec=records[spot.id];
-    if(rec){
-      // Ya existe registro — siempre pedir verificación
-      setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");
-    } else {
-      setIsEditing(false);setErrors({});setStep(1);
-    }
+    if(rec&&rec.email){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
+    else{setIsEditing(false);setErrors({});setStep(1);}
   };
 
   const handleEmailVerify=()=>{
@@ -1102,7 +690,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     const entered=emailInput.trim().toLowerCase();
     if(!entered){setErrors({emailVerify:"Ingresa tu correo"});return;}
     if(stored!==entered){setErrors({emailVerify:"El correo no coincide. Contacta a administración."});return;}
-    setFormState(f=>({...f,nombre:rec?.nombre||"",email:rec?.email||"",telefono:rec?.telefono||"",tipoResidente:rec?.tipoResidente||"",usoEstacionamiento:rec?.usoEstacionamiento||"",nombrePropietario:rec?.nombrePropietario||"",emailPropietario:rec?.emailPropietario||"",telefonoPropietario:rec?.telefonoPropietario||"",vehiculos:rec?.vehiculos?.length?rec.vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
+    setFormState(f=>({...f,nombre:rec?.nombre||"",email:rec?.email||"",telefono:rec?.telefono||"",tipoResidente:rec?.tipoResidente||"",usoEstacionamiento:rec?.usoEstacionamiento||"",vehiculos:rec?.vehiculos?.length?rec.vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
     setErrors({});setStep(1);
   };
 
@@ -1110,42 +698,20 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     const e={};
     if(s===1){
       if(!form.nombre.trim())e.nombre="Requerido";
-      if(!form.rut?.trim())e.rut="Requerido";
       if(!form.tipoResidente)e.tipoResidente="Selecciona una opción";
       if(form.telefono){const err=validarTelefono(form.telefono);if(err)e.telefono=err;}
-      if(form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo"){
-        if(!form.nombrePropietario?.trim())e.nombrePropietario="Requerido";
-        if(!form.emailPropietario?.trim())e.emailPropietario="Requerido";
-        if(!form.telefonoPropietario?.trim())e.telefonoPropietario="Requerido";
-        else{const err=validarTelefono(form.telefonoPropietario);if(err)e.telefonoPropietario=err;}
-        // Validar que los datos del propietario no sean iguales a los del residente
-        if(form.nombrePropietario?.trim() && form.nombrePropietario.trim().toLowerCase()===form.nombre.trim().toLowerCase())
-          e.nombrePropietario="El nombre del propietario no puede ser igual al tuyo";
-        if(form.emailPropietario?.trim() && form.emailPropietario.trim().toLowerCase()===form.email?.trim().toLowerCase())
-          e.emailPropietario="El correo del propietario no puede ser igual al tuyo";
-        if(form.telefonoPropietario?.trim() && form.telefonoPropietario.trim()===form.telefono?.trim())
-          e.telefonoPropietario="El teléfono del propietario no puede ser igual al tuyo";
-      }
     }
     if(s===2){
       if(!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
-      if(form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias"){
+      if(form.usoEstacionamiento==="ceder_largo"){
         if(!form.nombreCedido?.trim())e.nombreCedido="Requerido";
         if(!form.emailCedido?.trim())e.emailCedido="Requerido";
-        if(!form.rutCedido?.trim())e.rutCedido="Requerido";
-        if(!form.unidadCedido?.trim())e.unidadCedido="Requerido";
         if(!form.telefonoCedido?.trim())e.telefonoCedido="Requerido";
         else{const err=validarTelefono(form.telefonoCedido);if(err)e.telefonoCedido=err;}
-        if(!form.docCedido)e.docCedido="Debes adjuntar el carnet de identidad";
-        if(!form.aceptaDeclaracion)e.aceptaDeclaracion="Debes confirmar la declaración";
-        if(form.usoEstacionamiento==="ceder_dias"&&(!form.diasPrestamo||form.diasPrestamo.length===0))
-          e.diasPrestamo="Agrega al menos un día de préstamo";
+        if(!form.docCedido)e.docCedido="Debes adjuntar el documento de autorización";
       }
     }
-    if(s===3){
-      form.vehiculos.forEach((v,i)=>{if(!v.patente.trim())e[`pat_${i}`]="Ingresa la patente";});
-      if(!aceptaReglamento)e.reglamento="Debes aceptar el Reglamento de Copropiedad para continuar";
-    }
+    if(s===3)form.vehiculos.forEach((v,i)=>{if(!v.patente.trim())e[`pat_${i}`]="Ingresa la patente";});
     return e;
   };
 
@@ -1164,63 +730,41 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       nombre:form.nombre,email:form.email,telefono:form.telefono,
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
-      visitasPermanentes:(form.visitasPermanentes||[]).filter(v=>v.nombre||v.patente),
-      ...((form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias")?{nombreCedido:form.nombreCedido||"",emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||"",diasPrestamo:form.diasPrestamo||[]}:{}),
-      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{nombrePropietario:form.nombrePropietario||"",emailPropietario:form.emailPropietario||"",telefonoPropietario:form.telefonoPropietario||""}:{}),
-      updatedAt:new Date().toISOString()
-    };
-    // Actualizar estado local
-    setRecords(r=>({...r,[found.id]:data}));
-    // Guardar en Firestore
-    upsertRegistro(found.id, data).then(()=>{
-      console.log("✅ Registro guardado en Firestore:", found.id);
-    }).catch(e=>console.error("❌ Error guardando:", e));
-    const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
-    const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario/Ocupante"};
-    const emailParams={
-      tipo: isEditing?"Modificación de registro":"Nuevo registro",
-      nombre: form.nombre,
-      torre: TORRES_LABELS[found.torre]||found.torre,
-      depto: found.depto,
-      estac_id: found.id,
-      sector: SECTOR_NAMES[found.sector],
-      patentes: veh.map(v=>v.patente).join(", ")||"—",
-      telefono: form.telefono||"—",
-      uso: usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
-      fecha: new Date().toLocaleString("es-CL"),
-      email: form.email||"—",
-      tipo_residente: tipoL[form.tipoResidente]||form.tipoResidente,
-      ...((form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")?{
-        nombre_propietario: form.nombrePropietario||"",
-        email_propietario: form.emailPropietario||"",
-        telefono_propietario: form.telefonoPropietario||"",
+      ...(form.usoEstacionamiento==="ceder_largo"?{
+        nombreCedido:form.nombreCedido||"",rutCedido:form.rutCedido||"",
+        emailCedido:form.emailCedido||"",telefonoCedido:form.telefonoCedido||"",
+        torreCedido:form.torreCedido||"",deptoCedido:form.deptoCedido||"",
+        estadoPrestamo:"pendiente",
+        fechaInicioP:new Date().toISOString().split("T")[0],
+        fechaVencP:new Date(Date.now()+180*24*60*60*1000).toISOString().split("T")[0]
       }:{}),
+      updatedAt:new Date().toISOString(),
+      ...(isEditing?{}:{estadoRegistro:"pendiente",fechaRegistro:new Date().toISOString().split("T")[0]})
     };
-    // Enviar a GAS → guarda PDF en Drive + Sheets + envía Gmail
-    sendToGAS({
-      tipo: "registro",
-      es_edicion: isEditing,
-      nombre: form.nombre,
-      tipo_residente: tipoL[form.tipoResidente]||form.tipoResidente,
-      torre: TORRES_LABELS[found.torre]||found.torre,
-      depto: found.depto,
-      estac_id: found.id,
-      sector: SECTOR_NAMES[found.sector],
-      patentes: veh.map(v=>v.patente).join(", ")||"—",
-      uso: usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
-      telefono: form.telefono||"—",
-      email: form.email||"",
-      nombre_propietario: form.nombrePropietario||"",
-      email_propietario: form.emailPropietario||"",
-    });
+    setRecords(r=>({...r,[found.id]:data}));
+    const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
+    const emailParams={
+      nombre:form.nombre,
+      torre:TORRES_LABELS[found.torre]||found.torre,
+      depto:found.depto,
+      estac_id:found.id,
+      patentes:veh.map(v=>v.patente).join(", ")||"—",
+      telefono:form.telefono||"—",
+      uso:usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
+      fecha:new Date().toLocaleString("es-CL"),
+      sector:SECTOR_NAMES[found.sector],
+      email_residente:form.email||"",
+    };
+    sendEmail({...emailParams});
+    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()});
+    // Historial
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
-    ).catch(()=>{});
-    setStep(4);
-    showToast("Registro guardado correctamente");
+    );
+    setStep(4);showToast("Registro guardado correctamente");
   };
 
-  const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");setAceptaReglamento(false);setReglamentoExpanded(false);};
+  const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");};
   const addVehiculo=()=>{if(form.vehiculos.length<5)setFormState(f=>({...f,vehiculos:[...f.vehiculos,{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));};
   const updateVeh=(i,k,v)=>{setFormState(f=>({...f,vehiculos:f.vehiculos.map((x,j)=>j===i?{...x,[k]:k==="patente"?v.toUpperCase():v}:x)}));setErrors(e=>({...e,[`pat_${i}`]:""}));};
   const removeVeh=i=>setFormState(f=>({...f,vehiculos:f.vehiculos.filter((_,j)=>j!==i)}));
@@ -1239,40 +783,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     </label>
   );
 
-  if(!entered){
-    return (
-      <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"system-ui,sans-serif"}}>
-        <div style={{width:"100%",maxWidth:420}}>
-          <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600,marginBottom:24}}>← Volver</button>
-          <div style={{fontSize:22,fontWeight:900,color:"white",marginBottom:4}}>🏠 Mi Estacionamiento</div>
-          <div style={{fontSize:13,color:"rgba(255,255,255,.75)",marginBottom:24}}>¿Qué deseas hacer?</div>
-          <button onClick={()=>{setTab("form");setReportMode(false);setEntered(true);}}
-            style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"18px 20px",borderRadius:16,border:"none",cursor:"pointer",background:"white",marginBottom:12,textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,.2)"}}>
-            <span style={{fontSize:28}}>📝</span>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:"#0f172a"}}>Registro o modificación</div>
-              <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Registra tus patentes o actualiza tus datos</div>
-            </div>
-          </button>
-          <button onClick={()=>{setTab("query");setReportMode(true);setEntered(true);}}
-            style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"18px 20px",borderRadius:16,border:"none",cursor:"pointer",background:"#fff5f5",textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,.2)"}}>
-            <span style={{fontSize:28}}>⚠️</span>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:"#dc2626"}}>Reportar ocupación indebida</div>
-              <div style={{fontSize:12,color:"#b91c1c",marginTop:2}}>Un vehículo está en tu estacionamiento sin autorización</div>
-            </div>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{minHeight:"100vh",background:"#eef2f7",fontFamily:"system-ui,sans-serif"}}>
       <div style={{background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",padding:"16px 20px 0",boxShadow:"0 6px 24px rgba(37,99,235,.4)",position:"sticky",top:0,zIndex:50}}>
         <div style={{maxWidth:640,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-            <button onClick={()=>setEntered(false)} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600}}>←</button>
+            <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:9,padding:"7px 13px",cursor:"pointer",fontSize:16,fontWeight:600}}>←</button>
             <div style={{flex:1}}>
               <div style={{fontSize:10,fontWeight:600,opacity:0.7,textTransform:"uppercase",letterSpacing:1}}>Residente</div>
               <div style={{fontSize:20,fontWeight:900,letterSpacing:-0.4}}>🏠 Mi Estacionamiento</div>
@@ -1342,7 +858,6 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
 
             {step==="verify"&&found&&(()=>{
               const sc0=SC[found.sector],rec=records[found.id];
-              const sinEmail=!rec?.email;
               return <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,.08)"}}>
                 <div style={{background:sc0.bg,padding:"20px 24px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -1355,28 +870,18 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                   </div>
                 </div>
                 <div style={{padding:"22px"}}>
-                  {sinEmail?(
-                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"16px",marginBottom:16,textAlign:"center"}}>
-                      <div style={{fontSize:28,marginBottom:8}}>⚠️</div>
-                      <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:6}}>No se puede verificar identidad</div>
-                      <div style={{fontSize:12,color:"#b45309",lineHeight:1.5}}>Este registro no tiene correo electrónico asociado. Debes contactar a administración para modificarlo.</div>
+                  <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
+                    <span style={{fontSize:18}}>ℹ️</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#166534",marginBottom:3}}>Esta unidad ya tiene un registro</div>
+                      <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>Registrado a nombre de <strong>{rec?.nombre||"un residente"}</strong>. Para modificar, verifica tu identidad.</div>
                     </div>
-                  ):(
-                    <>
-                      <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
-                        <span style={{fontSize:18}}>ℹ️</span>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:700,color:"#166534",marginBottom:3}}>Esta unidad ya tiene un registro</div>
-                          <div style={{fontSize:12,color:"#15803d",lineHeight:1.5}}>Registrado a nombre de <strong>{rec?.nombre||"un residente"}</strong>. Para modificar, verifica tu identidad.</div>
-                        </div>
-                      </div>
-                      <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Correo electrónico registrado</label>
-                      <input type="email" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setErrors(er=>({...er,emailVerify:""}));}} placeholder="correo@ejemplo.com"
-                        style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${errors.emailVerify?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#f8fafc"}}/>
-                      {errors.emailVerify&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:8,background:"#fff5f5",border:"1px solid #fecaca",fontSize:12,color:"#dc2626"}}>⚠️ {errors.emailVerify}</div>}
-                      <button onClick={handleEmailVerify} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar y Editar →</button>
-                    </>
-                  )}
+                  </div>
+                  <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Correo electrónico registrado</label>
+                  <input type="email" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setErrors(er=>({...er,emailVerify:""}));}} placeholder="correo@ejemplo.com"
+                    style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${errors.emailVerify?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#f8fafc"}}/>
+                  {errors.emailVerify&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:8,background:"#fff5f5",border:"1px solid #fecaca",fontSize:12,color:"#dc2626"}}>⚠️ {errors.emailVerify}</div>}
+                  <button onClick={handleEmailVerify} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar y Editar →</button>
                   <button onClick={()=>{setStep(0);setFound(null);setIsEditing(false);}} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Volver</button>
                 </div>
               </div>;
@@ -1397,34 +902,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                     {radioBtn("tipoResidente","propietario_arriendo","Propietario no residente (arrienda)")}
                     {radioBtn("tipoResidente","arrendatario","Arrendatario / Ocupante")}
                   </div>
-                  {(form.tipoResidente==="arrendatario"||form.tipoResidente==="propietario_arriendo")&&(
-                    <div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:16}}>
-                      <div style={{fontSize:12,fontWeight:800,color:"#92400e",marginBottom:2}}>
-                        {form.tipoResidente==="arrendatario"?"👤 Datos del propietario (dueño de la unidad)":"👤 Datos de contacto del arrendatario"}
-                      </div>
-                      <div style={{fontSize:11,color:"#b45309",marginBottom:12,lineHeight:1.5}}>
-                        {form.tipoResidente==="arrendatario"
-                          ?"Como arrendatario u ocupante, debes indicar los datos del dueño de la propiedad."
-                          :"Como propietario no residente, ingresa los datos de quien ocupa la unidad."}
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {[["nombrePropietario","Nombre completo","Nombre y apellido","text"],["emailPropietario","Correo electrónico","correo@ejemplo.com","email"]].map(([k,lbl,ph,type])=>(
-                          <div key={k}>
-                            <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
-                            <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
-                              style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#fde68a"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
-                            {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
-                          </div>
-                        ))}
-                        <div>
-                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Teléfono <span style={{color:"#e53e3e"}}>*</span></label>
-                          <PhoneInput value={form.telefonoPropietario||""} onChange={v=>setF("telefonoPropietario",v)} error={errors.telefonoPropietario}/>
-                          {errors.telefonoPropietario&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefonoPropietario}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["rut","5. RUT","Ej: 12.345.678-9","text",true],["email","6. Correo electrónico","correo@ejemplo.com","email",false]].map(([k,lbl,ph,type,req])=>(
+                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false],["telefono","6. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
                       <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1432,11 +910,6 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                     </div>
                   ))}
-                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>7. Teléfono</label>
-                    <PhoneInput value={form.telefono} onChange={v=>setF("telefono",v)} error={errors.telefono}/>
-                    {errors.telefono&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefono}</span>}
-                  </div>
                 </div>
                 <div style={{display:"flex",gap:10,marginTop:20}}>
                   <button onClick={()=>setStep(0)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
@@ -1454,153 +927,113 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                 <h2 style={{margin:"0 0 6px",fontSize:16,fontWeight:800,color:"#0f172a"}}>Bloque 2: Uso del Espacio</h2>
                 <p style={{margin:"0 0 16px",fontSize:13,color:"#64748b"}}>7. ¿Cómo será utilizado el estacionamiento?</p>
                 {errors.usoEstacionamiento&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginBottom:8}}>{errors.usoEstacionamiento}</span>}
-                {radioBtn("usoEstacionamiento","uso_exclusivo","Uso exclusivo para vehículo(s) del residente. También puedes registrar visitas permanentes (familiares, empleados del hogar, etc.) en el Bloque 3.")}
+                {radioBtn("usoEstacionamiento","uso_exclusivo","Uso exclusivo para vehículo(s) del residente.")}
                 {radioBtn("usoEstacionamiento","visitas","Se utilizará principalmente para visitas.")}
-                {radioBtn("usoEstacionamiento","ceder_largo","Lo prestaré a largo plazo (renovación cada 6 meses).")}
-                {radioBtn("usoEstacionamiento","ceder_dias","Lo prestaré por día(s) — indicar fechas.")}
+                {radioBtn("usoEstacionamiento","ceder_largo","Préstamo permanente a otro comunero (requiere autorización del administrador).")}
                 {radioBtn("usoEstacionamiento","sin_uso","No tengo vehículo ni lo usaré por ahora.")}
-
-                {(form.usoEstacionamiento==="ceder_largo"||form.usoEstacionamiento==="ceder_dias")&&(
+                {form.usoEstacionamiento==="ceder_largo"&&(
                   <div style={{marginTop:16,padding:16,borderRadius:12,background:"#f0f9ff",border:"1.5px solid #bae6fd"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:14}}>
-                      🤝 Datos del comunero beneficiario
+                    <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <span>🤝 Datos del comunero beneficiario</span>
+                      <a href="/declaracion-autorizacion.docx" download style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,background:"#0369a1",color:"white",fontSize:10,fontWeight:700,textDecoration:"none"}}>
+                        📄 Descargar declaración
+                      </a>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                      {[["nombreCedido","Nombre completo","Ej: María González","text"],["emailCedido","Correo electrónico","correo@ejemplo.com","email"]].map(([k,lbl,ph,type])=>(
-                        <div key={k}>
-                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl} <span style={{color:"#e53e3e"}}>*</span></label>
-                          <input type={type} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}
-                            style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
-                          {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
-                        </div>
-                      ))}
+                      {/* Nombre */}
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Nombre completo <span style={{color:"#e53e3e"}}>*</span></label>
+                        <input value={form.nombreCedido||""} onChange={e=>setF("nombreCedido",e.target.value)} placeholder="Ej: María González"
+                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.nombreCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                        {errors.nombreCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.nombreCedido}</span>}
+                      </div>
+                      {/* RUT */}
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>RUT del beneficiario <span style={{color:"#e53e3e"}}>*</span></label>
                         <input value={form.rutCedido||""} onChange={e=>setF("rutCedido",e.target.value)} placeholder="Ej: 12.345.678-9"
-                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.rutCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.rutCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"monospace",background:"white",boxSizing:"border-box"}}/>
                         {errors.rutCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.rutCedido}</span>}
                       </div>
+                      {/* Correo */}
                       <div>
-                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Depto/unidad del beneficiario <span style={{color:"#e53e3e"}}>*</span></label>
-                        <input value={form.unidadCedido||""} onChange={e=>setF("unidadCedido",e.target.value)} placeholder="Ej: Depto B2, Torre 1052"
-                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.unidadCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
-                        {errors.unidadCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.unidadCedido}</span>}
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Correo electrónico <span style={{color:"#e53e3e"}}>*</span></label>
+                        <input type="email" value={form.emailCedido||""} onChange={e=>setF("emailCedido",e.target.value)} placeholder="correo@ejemplo.com"
+                          style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.emailCedido?"#e53e3e":"#bae6fd"}`,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}/>
+                        {errors.emailCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.emailCedido}</span>}
                       </div>
+                      {/* Teléfono */}
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Teléfono <span style={{color:"#e53e3e"}}>*</span></label>
-                        <PhoneInput value={form.telefonoCedido||""} onChange={v=>setF("telefonoCedido",v)} error={errors.telefonoCedido}/>
+                        <div style={{display:"flex",alignItems:"center",border:`1.5px solid ${errors.telefonoCedido?"#e53e3e":"#bae6fd"}`,borderRadius:8,background:"white",overflow:"hidden"}}>
+                          <span style={{padding:"9px 10px",fontSize:13,color:"#475569",background:"#f0f9ff",borderRight:"1px solid #bae6fd",fontWeight:600,whiteSpace:"nowrap"}}>+56</span>
+                          <input value={form.telefonoCedido||""} onChange={e=>setF("telefonoCedido",e.target.value.replace(/[^0-9]/g,"").slice(0,9))} placeholder="9 1234 5678"
+                            style={{flex:1,padding:"9px 12px",fontSize:13,border:"none",outline:"none",fontFamily:"inherit"}}/>
+                        </div>
                         {errors.telefonoCedido&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.telefonoCedido}</span>}
                       </div>
-
-                      {form.usoEstacionamiento==="ceder_largo"&&(
-                        <div style={{background:"#e0f2fe",borderRadius:8,padding:12,fontSize:12,color:"#0369a1",lineHeight:1.5}}>
-                          📅 El préstamo a largo plazo tiene duración de <strong>6 meses</strong> con renovación. La administración será notificada automáticamente.
-                        </div>
-                      )}
-
-                      {form.usoEstacionamiento==="ceder_dias"&&(
-                        <div>
-                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Días de préstamo <span style={{color:"#e53e3e"}}>*</span></label>
-                          <div style={{background:"white",borderRadius:10,border:`1.5px solid ${errors.diasPrestamo?"#e53e3e":"#bae6fd"}`,padding:12}}>
-                            <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
-                              <input type="date" value={form.fechaPrestamo||""} onChange={e=>setF("fechaPrestamo",e.target.value)} min={new Date().toISOString().slice(0,10)}
-                                style={{padding:"8px 10px",borderRadius:8,fontSize:13,border:"1.5px solid #bae6fd",outline:"none",flex:1}}/>
-                              <button onClick={()=>{
-                                if(!form.fechaPrestamo) return;
-                                const dias=Array.isArray(form.diasPrestamo)?form.diasPrestamo:[];
-                                if(!dias.includes(form.fechaPrestamo)){setF("diasPrestamo",[...dias,form.fechaPrestamo].sort());}
-                                setF("fechaPrestamo","");
-                              }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#0369a1",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar</button>
-                            </div>
-                            {Array.isArray(form.diasPrestamo)&&form.diasPrestamo.length>0&&(
-                              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                                {form.diasPrestamo.map(d=>(
-                                  <div key={d} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,background:"#0369a1",color:"white",fontSize:11,fontWeight:600}}>
-                                    📅 {d}
-                                    <span onClick={()=>setF("diasPrestamo",(form.diasPrestamo||[]).filter(x=>x!==d))} style={{cursor:"pointer",marginLeft:2,opacity:0.8}}>✕</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {(!form.diasPrestamo||form.diasPrestamo.length===0)&&<div style={{fontSize:11,color:"#94a3b8",textAlign:"center",padding:"8px 0"}}>Selecciona una fecha y presiona + Agregar</div>}
-                          </div>
-                          {errors.diasPrestamo&&<span style={{fontSize:10,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.diasPrestamo}</span>}
-                        </div>
-                      )}
-
-                      {/* ── DECLARACIÓN INLINE ── */}
-                      <div style={{background:"#f8fafc",borderRadius:10,border:"1.5px solid #cbd5e1",padding:16}}>
-                        <div style={{fontSize:12,fontWeight:800,color:"#0f172a",marginBottom:2}}>📋 Declaración simple</div>
-                        <div style={{fontSize:11,color:"#64748b",marginBottom:12,lineHeight:1.5}}>Generada automáticamente con tus datos. Revisa antes de confirmar.</div>
-                        <div style={{background:"white",borderRadius:8,border:"1px solid #e2e8f0",padding:16,fontSize:12,color:"#374151",lineHeight:1.9,textAlign:"justify"}}>
-                          <p style={{margin:"0 0 12px"}}>
-                            En la ciudad de Viña del Mar, a <strong>{new Date().toLocaleDateString("es-CL",{day:"numeric",month:"long",year:"numeric"})}</strong>,
-                            el suscrito, <strong>{form.nombre||"_______________"}</strong>, con RUT <strong>{form.rut||"_______________"}</strong>,
-                            en mi calidad de propietario de la unidad <strong>{found?.depto||"___"}, {TORRES_LABELS[found?.torre]||found?.torre||"___"}</strong>,
-                            ubicada en el Comunidad Edificio 12 Norte de Caja de Compensación de los Empleados Particulares,
-                            RUT 56.028.260-5, manifiesto mi voluntad prestar el espacio común que se me ha designado como
-                            estacionamiento <strong>#{found?.id||"___"}</strong> a: <strong>{form.nombreCedido||"_______________"}</strong>,
-                            con RUT <strong>{form.rutCedido||"_______________"}</strong>,
-                            de la unidad <strong>{form.unidadCedido||"_______________"}</strong>.
-                          </p>
-                          {form.usoEstacionamiento==="ceder_dias"&&form.diasPrestamo?.length>0&&(
-                            <p style={{margin:"0 0 12px"}}>
-                              El préstamo se realizará por los siguientes días: <strong>{form.diasPrestamo.join(", ")}</strong>.
-                            </p>
-                          )}
-                          {form.usoEstacionamiento==="ceder_largo"&&(
-                            <p style={{margin:"0 0 12px"}}>
-                              El préstamo tendrá una duración de <strong>6 meses</strong>, con posibilidad de renovación, sujeta a validación de la Administración.
-                            </p>
-                          )}
-                          <p style={{margin:"0 0 12px"}}>
-                            A su vez, declaró tener el registro de copropietarios, con toda la documentación, solicitada al día
-                            (certificado de dominio vigente, Carnet de identidad por ambos lados del propietario, Contrato de arriendo
-                            (en el caso que corresponda), Carnet de identidad por ambos lados del arrendatario u ocupante y Ficha de
-                            registro de copropietarios) quedando sujeto la efectividad del préstamo objeto de la presente declaración
-                            a la validación de dicho cumplimento por parte de la Administración.
-                          </p>
-                          <p style={{margin:"0 0 12px"}}>
-                            Por otro lado, eximo expresamente a la Comunidad Edificio 12 Norte de Caja de Compensación de los
-                            Empleados Particulares y a su administración de cualquier responsabilidad civil o contractual que pudiera
-                            derivarse del préstamo, incluyendo, pero no limitado a, daños a terceros, a la propiedad común o a
-                            propiedades privadas.
-                          </p>
-                          <p style={{margin:"0 0 20px"}}>
-                            Me comprometo a asumir íntegramente todos los costos en caso que dicho préstamo causare daños a
-                            terceros, a la propiedad común o a propiedades privadas.
-                          </p>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginTop:8}}>
-                            {[["Firma","_______________"],["Nombre del dueño",form.nombre||"_______________"],["RUT",form.rut||"_______________"]].map(([lbl,val])=>(
-                              <div key={lbl} style={{textAlign:"center"}}>
-                                <div style={{borderBottom:"1px solid #94a3b8",paddingBottom:4,marginBottom:4,fontSize:11,color:"#374151",minHeight:24}}>{val!=="_______________"?val:""}</div>
-                                <div style={{fontSize:10,color:"#64748b",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{lbl}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
-                          <input type="checkbox" id="acepta_declaracion" checked={!!form.aceptaDeclaracion}
-                            onChange={e=>setF("aceptaDeclaracion",e.target.checked)}
-                            style={{width:16,height:16,cursor:"pointer"}}/>
-                          <label htmlFor="acepta_declaracion" style={{fontSize:12,color:"#374151",cursor:"pointer",lineHeight:1.4}}>
-                            Confirmo que la información es correcta y acepto esta declaración
-                          </label>
-                        </div>
-                        {errors.aceptaDeclaracion&&<span style={{fontSize:10,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.aceptaDeclaracion}</span>}
-                      </div>
-
-                      {/* ── CARNET ── */}
+                      {/* Torre y Depto — selectores del sistema */}
                       <div>
-                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>
-                          Carnet de identidad <span style={{color:"#e53e3e"}}>*</span>
-                          <span style={{fontWeight:400,textTransform:"none",color:"#94a3b8",marginLeft:6}}>(foto o scan de quien presta)</span>
-                        </label>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Depto / unidad del beneficiario <span style={{color:"#e53e3e"}}>*</span></label>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          <div>
+                            <label style={{fontSize:10,color:"#64748b",display:"block",marginBottom:4}}>Torre</label>
+                            <select value={form.torreCedido||""} onChange={e=>{setF("torreCedido",e.target.value);setF("deptoCedido","");}}
+                              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.torreCedido?"#e53e3e":"#bae6fd"}`,outline:"none",background:"white",boxSizing:"border-box"}}>
+                              <option value="">Seleccionar...</option>
+                              {[...new Set(SPOTS_DATA.map(s=>s.torre))].sort().map(t=>(
+                                <option key={t} value={t}>Torre {t}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:"#64748b",display:"block",marginBottom:4}}>Depto</label>
+                            <select value={form.deptoCedido||""} onChange={e=>{setF("deptoCedido",e.target.value);setErrors(er=>({...er,torreCedido:""}));}}
+                              disabled={!form.torreCedido}
+                              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors.torreCedido?"#e53e3e":"#bae6fd"}`,outline:"none",background:form.torreCedido?"white":"#f8fafc",boxSizing:"border-box"}}>
+                              <option value="">Seleccionar...</option>
+                              {[...new Set(SPOTS_DATA.filter(s=>s.torre===form.torreCedido).map(s=>s.depto))].sort().map(d=>(
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        {errors.torreCedido&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginTop:2}}>{errors.torreCedido}</span>}
+                      </div>
+                      {/* Declaración simple generada automáticamente */}
+                      {form.nombreCedido&&form.rutCedido&&form.torreCedido&&form.deptoCedido&&(
+                        <div style={{background:"white",border:"1.5px solid #bae6fd",borderRadius:10,padding:16,fontSize:12,color:"#1e293b",lineHeight:1.7}}>
+                          <div style={{textAlign:"center",fontWeight:800,fontSize:13,marginBottom:12,color:"#0369a1"}}>📋 Declaración simple</div>
+                          <div style={{fontSize:10,color:"#64748b",textAlign:"center",marginBottom:12}}>Generada automáticamente con tus datos. Revisa antes de confirmar.</div>
+                          <p style={{margin:"0 0 10px"}}>Yo, <strong>{form.nombre||"__________________"}</strong>, RUT <strong>{form.rut||"__________________"}</strong>, residente del departamento <strong>{found?.depto||"___"}</strong>, Torre <strong>{found?.torre||"___"}</strong>, declaro que cedo el uso de mi espacio de estacionamiento N° <strong>#{found?.id||"__"}</strong> al señor/señora <strong>{form.nombreCedido}</strong>, RUT <strong>{form.rutCedido}</strong>, residente del departamento <strong>{form.deptoCedido}</strong>, Torre <strong>{form.torreCedido}</strong>.</p>
+                          <p style={{margin:"0 0 10px"}}>Declaro que el cedente y cesionario son residentes del Condominio 12 Norte, Viña del Mar, y que dicha cesión no implica arrendamiento ni transacción económica alguna, cumpliendo con lo establecido en el Reglamento de Copropiedad.</p>
+                          <p style={{margin:"0 0 16px"}}>Ambas partes quedan exentas de responsabilidad frente a la administración por el uso del espacio cedido, asumiendo el beneficiario plena responsabilidad por el vehículo y su comportamiento en las dependencias del condominio.</p>
+                          <div style={{borderTop:"1px solid #e2e8f0",paddingTop:14,marginTop:4}}>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,textAlign:"center"}}>
+                              <div>
+                                <div style={{borderBottom:"1px solid #94a3b8",marginBottom:6,paddingBottom:30}}></div>
+                                <div style={{fontSize:10,color:"#475569",fontWeight:700}}>Firma del cedente</div>
+                                <div style={{fontSize:10,color:"#94a3b8"}}>{form.nombre||"_______________"}</div>
+                                <div style={{fontSize:10,color:"#94a3b8"}}>RUT: {form.rut||"_______________"}</div>
+                              </div>
+                              <div>
+                                <div style={{borderBottom:"1px solid #94a3b8",marginBottom:6,paddingBottom:30}}></div>
+                                <div style={{fontSize:10,color:"#475569",fontWeight:700}}>Firma del beneficiario</div>
+                                <div style={{fontSize:10,color:"#94a3b8"}}>{form.nombreCedido}</div>
+                                <div style={{fontSize:10,color:"#94a3b8"}}>RUT: {form.rutCedido}</div>
+                              </div>
+                            </div>
+                            <div style={{textAlign:"center",marginTop:12,fontSize:10,color:"#94a3b8"}}>Fecha: {new Date().toLocaleDateString("es-CL",{day:"2-digit",month:"long",year:"numeric"})}</div>
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Documento de autorización <span style={{color:"#e53e3e"}}>*</span></label>
+                        <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Adjunta la declaración simple firmada.</div>
                         <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:9,border:`1.5px dashed ${errors.docCedido?"#e53e3e":form.docCedido?"#0ea5e9":"#bae6fd"}`,background:form.docCedido?"#e0f2fe":"white",cursor:"pointer"}}>
-                          <span style={{fontSize:20}}>{form.docCedido?"🪪":"📷"}</span>
+                          <span style={{fontSize:20}}>{form.docCedido?"📎":"📄"}</span>
                           <div style={{flex:1}}>
-                            <div style={{fontSize:12,fontWeight:700,color:form.docCedido?"#0369a1":"#475569"}}>{form.docCedido?form.docCedido.name:"Adjuntar carnet (frente y dorso)"}</div>
-                            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>JPG, PNG, PDF — máx. 5MB</div>
+                            <div style={{fontSize:12,fontWeight:700,color:form.docCedido?"#0369a1":"#475569"}}>{form.docCedido?form.docCedido.name:"Seleccionar archivo"}</div>
+                            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>PDF, JPG, PNG — máx. 5MB</div>
                           </div>
                           {form.docCedido&&<span style={{fontSize:18}}>✅</span>}
                           <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{display:"none"}}
@@ -1640,22 +1073,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                         {errors[`pat_${i}`]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[`pat_${i}`]}</span>}
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Marca</label>
-                          <input value={v.marca} onChange={e=>updateVeh(i,"marca",e.target.value)} placeholder="Toyota, Kia..." list={`marcas_${i}`}
-                            style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                          <datalist id={`marcas_${i}`}>
-                            {["Toyota","Kia","Hyundai","Chevrolet","Suzuki","Nissan","Mazda","Honda","Ford","Volkswagen","Peugeot","Renault","Mitsubishi","Subaru","Jeep","Fiat","BMW","Mercedes-Benz","Audi","Volvo","Citroën","Chery","MG","BYD","GWM","JAC","Haval","Geely","Lifan","BAIC","Hongqi","Dodge","RAM","Isuzu","SsangYong"].map(m=><option key={m} value={m}/>)}
-                          </datalist>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Color</label>
-                          <input value={v.color} onChange={e=>updateVeh(i,"color",e.target.value)} placeholder="Blanco, Negro..." list={`colores_${i}`}
-                            style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                          <datalist id={`colores_${i}`}>
-                            {["Blanco","Negro","Gris","Plata","Rojo","Azul","Verde","Café","Beige","Naranjo","Amarillo","Morado","Celeste","Vino"].map(c=><option key={c} value={c}/>)}
-                          </datalist>
-                        </div>
+                        {[["marca","Marca","Toyota, Kia..."],["color","Color","Blanco, Negro..."]].map(([k,lbl,ph])=>(
+                          <div key={k}>
+                            <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl}</label>
+                            <input value={v[k]} onChange={e=>updateVeh(i,k,e.target.value)} placeholder={ph}
+                              style={{width:"100%",padding:"9px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                          </div>
+                        ))}
                       </div>
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>¿Es de visita recurrente?</label>
@@ -1668,15 +1092,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                         {v.esVisita==="si"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 12px",borderRadius:8,background:"#eff6ff",border:"1px solid #bfdbfe"}}>
                             <div style={{fontSize:10,fontWeight:700,color:"#1d4ed8"}}>Datos de la visita</div>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>Nombre visita</label>
-                              <input value={v.nombreVisita||""} onChange={e=>updateVeh(i,"nombreVisita",e.target.value)} placeholder="Ej: María González"
-                                style={{width:"100%",padding:"8px 10px",borderRadius:7,fontSize:12,border:"1.5px solid #bfdbfe",outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
-                            </div>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>Teléfono visita</label>
-                              <PhoneInput value={v.telefonoVisita||""} onChange={val=>updateVeh(i,"telefonoVisita",val)} placeholder="9 1234 5678"/>
-                            </div>
+                            {[["nombreVisita","Nombre visita","Ej: María González"],["telefonoVisita","Teléfono visita","+56 9 ..."]].map(([k,lbl,ph])=>(
+                              <div key={k}>
+                                <label style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:3}}>{lbl}</label>
+                                <input value={v[k]||""} onChange={e=>updateVeh(i,k,e.target.value)} placeholder={ph}
+                                  style={{width:"100%",padding:"8px 10px",borderRadius:7,fontSize:12,border:"1.5px solid #bfdbfe",outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1684,47 +1106,6 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                   </div>
                 ))}
                 {form.vehiculos.length<5&&<button onClick={addVehiculo} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed #2563eb",background:"#eff6ff",color:"#2563eb",cursor:"pointer",fontSize:13,fontWeight:600,marginBottom:4}}>+ Agregar otro vehículo</button>}
-
-                <div style={{background:"#f8fafc",borderRadius:12,border:`1.5px solid ${errors.reglamento?"#e53e3e":"#e2e8f0"}`,overflow:"hidden",marginTop:16}}>
-                  <div style={{padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <div style={{fontSize:12,fontWeight:800,color:"#0f172a"}}>📋 Reglamento de Copropiedad</div>
-                    <button onClick={()=>setReglamentoExpanded(v=>!v)} style={{background:"none",border:"none",color:"#2563eb",fontSize:11,fontWeight:700,cursor:"pointer",padding:"2px 8px",borderRadius:6,background:"#eff6ff"}}>
-                      {reglamentoExpanded?"▲ Cerrar":"▼ Leer reglamento"}
-                    </button>
-                  </div>
-                  {reglamentoExpanded&&(
-                    <div style={{padding:"14px 16px",maxHeight:260,overflowY:"auto",fontSize:11,color:"#374151",lineHeight:1.7,background:"white"}}>
-                      <p style={{margin:"0 0 10px",fontWeight:700,color:"#0f172a"}}>Artículo 23 — Reglamento de Copropiedad</p>
-                      <p style={{margin:"0 0 10px"}}>Cada copropietario podrá solicitar una porción del espacio común como estacionamiento, para que sea utilizado por el residente (dueño, ocupante y/o arrendatario) con el único objeto de estacionar un automóvil y/o vehículo similar en dicho espacio asignado, el cual deberá ser respetado por los demás comuneros. Esta asignación está señalada en el reglamento interno. Los espacios asignados para uso de estacionamiento constituyen meramente asignaciones de uso de una porción de espacio común, razón por la que no forma parte del dominio singular que cada comunero tiene respecto de su departamento. Por tanto, los comuneros no pueden vender, ceder, enajenar, arrendar, subarrendar o prometer servicio alguno en ellos ya sea de forma directa o indirecta mediante corredores de propiedades o sus arrendatarios.</p>
-                      <p style={{margin:"0 0 10px"}}>Será responsabilidad de cada comunero hacer uso de forma responsable del espacio asignado como estacionamiento, respetando la demarcación respectiva de forma tal que no impida el correcto estacionamiento de los demás comuneros. Asimismo, corresponderá a cada comunero no permitir que terceros le priven y/o perturben su derecho de uso del espacio asignado, debiendo en primera instancia, buscar personalmente la forma de resolver con el comunero que esté ocupando indebidamente su estacionamiento. En caso de que definitivamente no se pudo arribar a una solución directa, el comunero afectado deberá efectuar la denuncia y remitir los antecedentes respectivos a la Administración, para efectos de aplicar multas y ejercer las acciones legales pertinentes.</p>
-                      <p style={{margin:"0 0 6px",fontWeight:700,color:"#0f172a"}}>Normas de uso:</p>
-                      <p style={{margin:"0 0 6px"}}>a) Cada propietario tiene derecho a un estacionamiento.</p>
-                      <p style={{margin:"0 0 6px"}}>b) Se permite prestar el espacio a otros residentes, siempre informando a la administración mediante declaración simple. Es necesario contar con el registro de copropietario al día.</p>
-                      <p style={{margin:"0 0 6px"}}>c) Es obligatorio registrar la patente del vehículo asignado. Cualquier modificación debe ser comunicada a la administración.</p>
-                      <p style={{margin:"0 0 6px"}}>d) El estacionamiento no puede ser arrendado ni entregado en uso y goce a personas no residentes en el edificio.</p>
-                      <p style={{margin:"0 0 6px"}}>e) Se permite estacionar vehículos externos que concurran de visita. El incumplimiento se sancionará con multa categorizada como grave.</p>
-                      <p style={{margin:"0 0 10px",fontWeight:700,color:"#0f172a",marginTop:10}}>Reglamento Interno — Normas adicionales:</p>
-                      <p style={{margin:"0 0 6px"}}>• Solo se permiten motocicletas, automóviles y camionetas (máx. 5.25m largo × 1.85m ancho).</p>
-                      <p style={{margin:"0 0 6px"}}>• Velocidad máxima de circulación: 15 km/hr.</p>
-                      <p style={{margin:"0 0 6px"}}>• Los vehículos deben estacionarse aculatados (parte trasera al interior).</p>
-                      <p style={{margin:"0 0 6px"}}>• Prohibido estacionar en pistas de circulación bajo cualquier circunstancia.</p>
-                      <p style={{margin:"0 0 6px"}}>• Prohibido cerrar espacios o dejar objetos en ellos (bicicletas, neumáticos, etc.).</p>
-                      <p style={{margin:"0 0 6px"}}>• Prohibido el lavado de vehículos con agua y jabón, trabajos de mecánica mayor, y acopio de escombros o basuras.</p>
-                      <p style={{margin:"0 0 6px"}}>• Está prohibido estacionar o tener vehículos abandonados. El incumplimiento será sancionado con multa grave por cada día.</p>
-                      <p style={{margin:"0 0 0px"}}>• En caso de estacionar en lugar no designado o infringir las normas, la Administración podrá aplicar traba ruedas hasta el pago de la multa correspondiente.</p>
-                    </div>
-                  )}
-                  <div style={{padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10,background:aceptaReglamento?"#f0fdf4":"white",transition:"background .2s"}}>
-                    <div onClick={()=>setAceptaReglamento(v=>!v)} style={{width:20,height:20,borderRadius:5,border:`2px solid ${aceptaReglamento?"#16a34a":errors.reglamento?"#e53e3e":"#cbd5e1"}`,background:aceptaReglamento?"#16a34a":"white",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:1}}>
-                      {aceptaReglamento&&<span style={{color:"white",fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
-                    </div>
-                    <label onClick={()=>setAceptaReglamento(v=>!v)} style={{fontSize:12,color:"#374151",lineHeight:1.5,cursor:"pointer"}}>
-                      He leído y acepto el <strong>Reglamento de Copropiedad</strong> y el <strong>Reglamento Interno</strong> respecto al uso de estacionamientos. Entiendo que el incumplimiento puede derivar en multas y acciones legales.
-                    </label>
-                  </div>
-                  {errors.reglamento&&<div style={{padding:"6px 16px 10px",fontSize:11,color:"#e53e3e"}}>{errors.reglamento}</div>}
-                </div>
-
                 <div style={{display:"flex",gap:10,marginTop:16}}>
                   <button onClick={()=>setStep(2)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
                   <button onClick={next} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:"#16a34a",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>✅ Enviar Registro</button>
@@ -1735,14 +1116,29 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
             {step===4&&found&&(()=>{
               const sc4=SC[found.sector];
               const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario"};
-              const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
+              const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
               return <div>
                 <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 4px 24px rgba(0,0,0,.08)",textAlign:"center",marginBottom:14}}>
                   <div style={{background:sc4.bg,padding:"32px 24px 24px"}}>
-                    <div style={{fontSize:52,marginBottom:10}}>✅</div>
-                    <div style={{fontSize:20,fontWeight:900,color:"white",marginBottom:4}}>{isEditing?"✏️ Registro modificado":"¡Registro enviado!"}</div>
+                    <div style={{fontSize:52,marginBottom:10}}>{isEditing?"✏️":"⏳"}</div>
+                    <div style={{fontSize:20,fontWeight:900,color:"white",marginBottom:4}}>
+                      {form.usoEstacionamiento==="ceder_largo"?"Solicitud enviada":(isEditing?"Registro modificado":"Registro recibido")}
+                    </div>
                     <div style={{fontFamily:"monospace",fontSize:28,fontWeight:900,color:sc4.accent}}>#{found.id}</div>
                     <div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:4}}>{SECTOR_NAMES[found.sector]} · Torre {found.torre} · {found.depto}</div>
+                  </div>
+                  <div style={{padding:"14px 20px",background:form.usoEstacionamiento==="ceder_largo"?"#fffbeb":"#f0fdf4",borderBottom:`1px solid ${form.usoEstacionamiento==="ceder_largo"?"#fde68a":"#bbf7d0"}`,display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:20}}>{form.usoEstacionamiento==="ceder_largo"?"⏳":"🔍"}</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:form.usoEstacionamiento==="ceder_largo"?"#92400e":"#166534",marginBottom:2}}>
+                        {form.usoEstacionamiento==="ceder_largo"?"Préstamo pendiente de autorización":"Registro pendiente de visado"}
+                      </div>
+                      <div style={{fontSize:11,color:form.usoEstacionamiento==="ceder_largo"?"#78350f":"#14532d",lineHeight:1.5}}>
+                        {form.usoEstacionamiento==="ceder_largo"
+                          ?"Tu solicitud fue recibida. La administración verificará el registro de copropietarios y te notificará por email al aprobar o rechazar el préstamo."
+                          :"Tu registro fue recibido. La administración lo visará una vez verificado. Recibirás confirmación por email."}
+                      </div>
+                    </div>
                   </div>
                   <div style={{padding:"20px 24px"}}>
                     <div style={{background:"#f8fafc",borderRadius:10,padding:"14px 16px",textAlign:"left",marginBottom:16,display:"flex",flexDirection:"column",gap:8}}>
@@ -1750,9 +1146,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       <SummaryRow label="Tipo" value={tipoL[form.tipoResidente]||form.tipoResidente}/>
                       <SummaryRow label="Vehículos" value={form.vehiculos.filter(v=>v.patente).map(v=>v.patente).join(", ")||"—"}/>
                       <SummaryRow label="Uso" value={usoL[form.usoEstacionamiento]||"—"}/>
-                      {form.tipoResidente==="arrendatario"&&<SummaryRow label="Propietario" value={form.nombrePropietario||"—"}/>}
+                      {form.usoEstacionamiento==="ceder_largo"&&<SummaryRow label="Estado préstamo" value="⏳ Pendiente de autorización"/>}
                     </div>
-                    <button onClick={()=>setEntered(false)} style={{width:"100%",padding:"12px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Volver al inicio</button>
+                    <button onClick={resetForm} style={{width:"100%",padding:"12px",borderRadius:9,border:"1.5px solid #2563eb",background:"white",color:"#2563eb",fontWeight:700,fontSize:13,cursor:"pointer"}}>Registrar otra unidad</button>
+                    <button onClick={()=>setReclamo({spot:found,record:records[found.id]})}
+                      style={{width:"100%",marginTop:8,padding:"12px",borderRadius:9,border:"1.5px solid #ef4444",background:"#fff5f5",color:"#dc2626",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                      ⚠️ Reportar ocupación indebida
+                    </button>
                   </div>
                 </div>
                 <div style={{background:"#1e293b",borderRadius:16,overflow:"hidden",border:`2px solid ${sc4.accent}40`}}>
@@ -1773,7 +1173,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
             })()}
           </div>
         )}
-        {tab==="query"&&<QueryTab records={records} reportMode={reportMode} onReportDone={()=>setEntered(false)}/>}
+        {tab==="query"&&<QueryTab records={records}/>}
       </div>
       {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>setReclamo(null)} onSent={()=>showToast("Reclamo enviado a administración","info")}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type}/>}
@@ -1781,217 +1181,169 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
   );
 };
 
-// ── TÉCNICOS (Firestore) ──
-const esVigenteTec = (t, hoy) => !t.fechaFin || t.fechaFin >= hoy;
-const loadTecnicos = async () => {
+// ── FIRESTORE SOLICITUDES ──
+const loadSolicitudes = async () => {
   try {
-    const { db, getDocs, collection } = await getFirebase();
-    const snap = await getDocs(collection(db, "tecnicos"));
-    const result = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return result.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
-  } catch(e) { console.error("loadTecnicos:", e); return []; }
+    const {db,getDocs,collection} = await getFirebase();
+    const snap = await getDocs(collection(db,"solicitudes_prestamo"));
+    return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  } catch(e){console.error("loadSolicitudes:",e);return [];}
 };
-const saveTecnico = async (data) => {
+const updateSolicitud = async (id,patch) => {
   try {
-    const { db, collection, addDoc, serverTimestamp } = await getFirebase();
-    const ref = await addDoc(collection(db, "tecnicos"), { ...data, createdAt: serverTimestamp() });
-    console.log("✅ Técnico guardado:", ref.id);
-    return { id: ref.id, ...data };
-  } catch(e) { console.error("❌ saveTecnico error:", e); return null; }
-};
-const updateTecnico = async (id, patch) => {
-  try {
-    const { db, doc, updateDoc } = await getFirebase();
-    await updateDoc(doc(db, "tecnicos", id), patch);
-    console.log("✅ Técnico actualizado:", id);
-  } catch(e) { console.error("❌ updateTecnico error:", e); }
-};
-const deleteTecnico = async (id) => {
-  try {
-    const { db, doc, deleteDoc } = await getFirebase();
-    await deleteDoc(doc(db, "tecnicos", id));
-    console.log("✅ Técnico eliminado:", id);
-  } catch(e) { console.error("❌ deleteTecnico error:", e); }
+    const {db,doc,updateDoc} = await getFirebase();
+    await updateDoc(doc(db,"solicitudes_prestamo",id),patch);
+  } catch(e){console.error("updateSolicitud:",e);}
 };
 
-// ── TÉCNICOS TAB ──
-const TecnicosTab = () => {
-  const [tecnicos,setTecnicos]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [showForm,setShowForm]=useState(false);
-  const [editId,setEditId]=useState(null);
-  const [form,setForm]=useState({nombre:"",empresa:"",patentes:[],patenteInput:"",fechaInicio:"",fechaFin:"",observaciones:""});
-  const [errors,setErrors]=useState({});
-  const [busqueda,setBusqueda]=useState("");
+// ── SOLICITUDES TAB ──
+const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
+  const [solis,setSolis] = useState([]);
+  const [loading,setLoading] = useState(true);
+  const [rechazarId,setRechazarId] = useState(null);
+  const [motivo,setMotivo] = useState("");
+  const [toast,setToast] = useState(null);
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
 
-  useEffect(()=>{ loadTecnicos().then(d=>{setTecnicos(d);setLoading(false);}); },[]);
+  useEffect(()=>{loadSolicitudes().then(d=>{setSolis(d);setLoading(false);});},[]);
 
-  const hoy = new Date().toISOString().slice(0,10);
-
-  const esVigente = (t) => !t.fechaFin || t.fechaFin >= hoy;
-
-  const resetForm = () => { setForm({nombre:"",empresa:"",patentes:[],patenteInput:"",fechaInicio:"",fechaFin:"",observaciones:""}); setErrors({}); setEditId(null); setShowForm(false); };
-
-  const guardar = async () => {
-    const e = {};
-    if(!form.nombre.trim()) e.nombre="Requerido";
-    if(!Array.isArray(form.patentes)||form.patentes.length===0) e.patentes="Ingresa al menos una patente";
-    if(Object.keys(e).length){ setErrors(e); return; }
-    const data = {
-      nombre: form.nombre.trim(),
-      empresa: form.empresa.trim(),
-      patentes: form.patentes,
-      fechaInicio: form.fechaInicio || hoy,
-      fechaFin: form.fechaFin || "",
-      observaciones: form.observaciones.trim(),
-    };
-    if(editId){
-      await updateTecnico(editId, data);
-      setTecnicos(prev=>prev.map(t=>t.id===editId?{...t,...data}:t));
-    } else {
-      const nuevo = await saveTecnico(data);
-      if(nuevo) setTecnicos(prev=>[nuevo,...prev]);
-    }
-    resetForm();
+  const aprobar = async (s) => {
+    await updateSolicitud(s.id,{estadoPrestamo:"activo",aprobadoAt:new Date().toISOString()});
+    setSolis(prev=>prev.map(x=>x.id===s.id?{...x,estadoPrestamo:"activo"}:x));
+    // Notificar via GAS
+    const p=new URLSearchParams({tipo:"aprobar_prestamo",estac_id:s.estacId,
+      nombre:s.nombre,email:s.email,nombreCedido:s.nombreCedido,emailCedido:s.emailCedido,
+      fechaVenc:s.fechaVencP||""});
+    new Image().src=GAS_URL+"?"+p.toString();
+    showToast("✅ Préstamo aprobado — notificación enviada");
   };
 
-  const eliminar = async (id) => {
-    if(!window.confirm("¿Eliminar este técnico?")) return;
-    await deleteTecnico(id);
-    setTecnicos(prev=>prev.filter(t=>t.id!==id));
+  const rechazar = async () => {
+    if(!rechazarId||!motivo.trim())return;
+    const s=solis.find(x=>x.id===rechazarId);
+    await updateSolicitud(rechazarId,{estadoPrestamo:"rechazado",motivoRechazo:motivo,rechazadoAt:new Date().toISOString()});
+    setSolis(prev=>prev.map(x=>x.id===rechazarId?{...x,estadoPrestamo:"rechazado",motivoRechazo:motivo}:x));
+    const p=new URLSearchParams({tipo:"rechazar_prestamo",estac_id:s?.estacId||"",
+      nombre:s?.nombre||"",email:s?.email||"",motivo});
+    new Image().src=GAS_URL+"?"+p.toString();
+    setRechazarId(null);setMotivo("");
+    showToast("Solicitud rechazada — residente notificado","info");
   };
 
-  const editar = (t) => {
-    setForm({ nombre:t.nombre, empresa:t.empresa||"", patentes:t.patentes||[], patenteInput:"", fechaInicio:t.fechaInicio||"", fechaFin:t.fechaFin||"", observaciones:t.observaciones||"" });
-    setEditId(t.id);
-    setShowForm(true);
+  const estadoBadge=(e)=>{
+    const cfg={pendiente:{bg:"#fffbeb",color:"#92400e",label:"⏳ Pendiente"},activo:{bg:"#f0fdf4",color:"#166534",label:"✅ Aprobado"},rechazado:{bg:"#fff1f2",color:"#9f1239",label:"✕ Rechazado"}};
+    const c=cfg[e]||cfg.pendiente;
+    return <span style={{padding:"3px 10px",borderRadius:20,background:c.bg,color:c.color,fontSize:10,fontWeight:700}}>{c.label}</span>;
   };
 
-  const filtrados = tecnicos.filter(t =>
-    t.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    t.empresa?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (t.patentes||[]).some(p=>p.includes(busqueda.toUpperCase()))
-  );
+  if(loading)return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando solicitudes...</div>;
 
-  return <div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-      <div style={{fontSize:13,fontWeight:700,color:"white"}}>🔧 Técnicos autorizados</div>
-      <button onClick={()=>{resetForm();setShowForm(true);}}
-        style={{padding:"8px 16px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar técnico</button>
-    </div>
+  const pendientes=solis.filter(s=>s.estadoPrestamo==="pendiente");
+  const resto=solis.filter(s=>s.estadoPrestamo!=="pendiente");
 
-    {showForm&&(
-      <div style={{background:"#111827",borderRadius:14,padding:20,marginBottom:16,border:"1px solid #1f2937"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"white",marginBottom:14}}>{editId?"✏️ Editar técnico":"➕ Nuevo técnico"}</div>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {[["nombre","Nombre completo","Ej: Juan Pérez",true],["empresa","Empresa / Contratista","Ej: Termiservicios",false]].map(([k,lbl,ph,req])=>(
-            <div key={k}>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
-              <input value={form[k]} onChange={e=>{setForm(f=>({...f,[k]:e.target.value}));setErrors(er=>({...er,[k]:""}));}} placeholder={ph}
-                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-              {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
-            </div>
-          ))}
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Patentes <span style={{color:"#e53e3e"}}>*</span></label>
-            <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <input value={form.patenteInput||""} onChange={e=>setForm(f=>({...f,patenteInput:e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}))}
-                onKeyDown={e=>{
-                  if(e.key==="Enter"&&form.patenteInput?.trim()){
-                    const p=form.patenteInput.trim();
-                    const arr=Array.isArray(form.patentes)?form.patentes:[];
-                    if(!arr.includes(p))setForm(f=>({...f,patentes:[...arr,p],patenteInput:""}));
-                    else setForm(f=>({...f,patenteInput:""}));
-                  }
-                }}
-                placeholder="ABCD12" maxLength={8}
-                style={{flex:1,padding:"9px 12px",borderRadius:8,fontSize:14,fontFamily:"monospace",fontWeight:700,letterSpacing:2,border:`1.5px solid ${errors.patentes?"#e53e3e":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",textTransform:"uppercase"}}/>
-              <button onClick={()=>{
-                const p=(form.patenteInput||"").trim();
-                if(!p)return;
-                const arr=Array.isArray(form.patentes)?form.patentes:[];
-                if(!arr.includes(p)){setForm(f=>({...f,patentes:[...arr,p],patenteInput:""}));setErrors(er=>({...er,patentes:""}));}
-                else setForm(f=>({...f,patenteInput:""}));
-              }} style={{padding:"9px 16px",borderRadius:8,border:"none",background:"#2563eb",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar</button>
-            </div>
-            {Array.isArray(form.patentes)&&form.patentes.length>0&&(
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
-                {form.patentes.map(p=>(
-                  <div key={p} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:20,background:"#1f2937",border:"1px solid #374151"}}>
-                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:"#60a5fa",letterSpacing:1}}>{p}</span>
-                    <span onClick={()=>setForm(f=>({...f,patentes:(f.patentes||[]).filter(x=>x!==p)}))} style={{cursor:"pointer",color:"#ef4444",fontWeight:700,fontSize:12,lineHeight:1}}>✕</span>
-                  </div>
-                ))}
+  return (
+    <div>
+      {toast&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",padding:"10px 20px",borderRadius:10,background:toast.type==="info"?"#1e40af":"#166534",color:"white",fontWeight:700,fontSize:13,zIndex:999,boxShadow:"0 4px 20px rgba(0,0,0,.3)"}}>{toast.msg}</div>}
+      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>🤝 Solicitudes de préstamo permanente</h3>
+      <p style={{color:"#64748b",fontSize:12,margin:"0 0 16px"}}>Verifica que ambos comuneros estén al día en el registro antes de aprobar.</p>
+
+      {/* Registros pendientes de visado */}
+      {(()=>{
+        const pendVisado=Object.entries(records).filter(([,r])=>r.estadoRegistro==="pendiente");
+        if(pendVisado.length===0)return null;
+        return (
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#fb923c",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📋 Registros pendientes de visado ({pendVisado.length})</div>
+            {pendVisado.map(([id,r])=>(
+              <div key={id} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1.5px solid #fb923c40",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{id} — {r.nombre||"—"}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Torre {r.torre} · {r.depto} · {r.fechaRegistro||"—"}</div>
+                  <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
+                </div>
+                <button onClick={async()=>{
+                  const {db,doc,updateDoc}=await getFirebase();
+                  await updateDoc(doc(db,"registros",String(id)),{estadoRegistro:"visado"});
+                  setRecords(prev=>({...prev,[id]:{...prev[id],estadoRegistro:"visado"}}));
+                }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:11,cursor:"pointer",flexShrink:0,marginLeft:10}}>✅ Visar</button>
               </div>
-            )}
-            {(!form.patentes||form.patentes.length===0)&&<div style={{fontSize:10,color:"#4b5563"}}>Ingresa una patente y presiona + Agregar</div>}
-            {errors.patentes&&<span style={{fontSize:10,color:"#e53e3e",display:"block",marginTop:2}}>{errors.patentes}</span>}
+            ))}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Fecha inicio</label>
-              <input type="date" value={form.fechaInicio} onChange={e=>setForm(f=>({...f,fechaInicio:e.target.value}))}
-                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",boxSizing:"border-box"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Fecha término <span style={{color:"#4b5563",fontWeight:400}}>(opcional)</span></label>
-              <input type="date" value={form.fechaFin} onChange={e=>setForm(f=>({...f,fechaFin:e.target.value}))}
-                style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",boxSizing:"border-box"}}/>
-            </div>
-          </div>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}}>Observaciones</label>
-            <input value={form.observaciones} onChange={e=>setForm(f=>({...f,observaciones:e.target.value}))} placeholder="Ej: Mantención ascensores piso 3"
-              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-          </div>
-          <div style={{display:"flex",gap:8,marginTop:4}}>
-            <button onClick={resetForm} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #1f2937",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-            <button onClick={guardar} style={{flex:2,padding:"10px",borderRadius:9,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:13,cursor:"pointer"}}>{editId?"Guardar cambios":"Registrar técnico"}</button>
-          </div>
-        </div>
-      </div>
-    )}
+        );
+      })()}
 
-    <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar por nombre, empresa o patente..."
-      style={{width:"100%",padding:"10px 14px",borderRadius:10,fontSize:13,border:"1px solid #1f2937",background:"#111827",color:"white",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+      {pendientes.length===0&&resto.length===0&&Object.keys(records).filter(id=>records[id]?.estadoRegistro==="pendiente").length===0&&(
+        <div style={{textAlign:"center",padding:40,color:"#4b5563",fontSize:13}}>No hay solicitudes registradas aún.</div>
+      )}
 
-    {loading&&<div style={{textAlign:"center",padding:32,color:"#4b5563"}}>Cargando...</div>}
-    {!loading&&filtrados.length===0&&(
-      <div style={{textAlign:"center",padding:32,background:"#111827",borderRadius:12,border:"1px solid #1f2937"}}>
-        <div style={{fontSize:32,marginBottom:8}}>🔧</div>
-        <div style={{color:"#4b5563",fontSize:13}}>No hay técnicos registrados</div>
-      </div>
-    )}
-    {filtrados.map(t=>{
-      const vigente = esVigente(t);
-      return <div key={t.id} style={{background:"#111827",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${vigente?"#1f2937":"#450a0a"}`,borderLeft:`3px solid ${vigente?"#2563eb":"#7f1d1d"}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t.nombre}</div>
-            {t.empresa&&<div style={{fontSize:11,color:"#4b5563",marginTop:2}}>🏢 {t.empresa}</div>}
-          </div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <span style={{padding:"3px 8px",borderRadius:6,background:vigente?"rgba(34,197,94,.15)":"rgba(239,68,68,.15)",border:`1px solid ${vigente?"#22c55e50":"#ef444450"}`,fontSize:10,fontWeight:700,color:vigente?"#22c55e":"#ef4444"}}>
-              {vigente?"✅ Vigente":"❌ Vencido"}
-            </span>
-          </div>
-        </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-          {(t.patentes||[]).map(p=>(
-            <span key={p} style={{padding:"4px 10px",borderRadius:6,background:"#1f2937",border:"1px solid #374151",fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#60a5fa"}}>{p}</span>
+      {pendientes.length>0&&(
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>⏳ Pendientes de autorización ({pendientes.length})</div>
+          {pendientes.map(s=>(
+            <div key={s.id} style={{background:"#0f172a",borderRadius:12,padding:16,marginBottom:10,border:"1.5px solid #f59e0b40"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{s.estacId} — Torre {s.torreCedente} · {s.deptoCedente}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Solicitado: {s.createdAt?.toDate?.()?.toLocaleDateString("es-CL")||s.fechaSolicitud||"—"}</div>
+                </div>
+                {estadoBadge(s.estadoPrestamo)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                <div style={{background:"#1e293b",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#60a5fa",textTransform:"uppercase",marginBottom:6}}>Cedente</div>
+                  <div style={{fontSize:12,color:"white",fontWeight:600}}>{s.nombre||"—"}</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{s.email||"—"}</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>Torre {s.torreCedente} · {s.deptoCedente}</div>
+                </div>
+                <div style={{background:"#1e293b",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#34d399",textTransform:"uppercase",marginBottom:6}}>Beneficiario</div>
+                  <div style={{fontSize:12,color:"white",fontWeight:600}}>{s.nombreCedido||"—"}</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{s.emailCedido||"—"}</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>Torre {s.torreCedido} · {s.deptoCedido}</div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button onClick={()=>aprobar(s)} style={{padding:"9px",borderRadius:8,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>✅ Aprobar</button>
+                <button onClick={()=>{setRechazarId(s.id);setMotivo("");}} style={{padding:"9px",borderRadius:8,border:"none",background:"#dc2626",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>✕ Rechazar</button>
+              </div>
+            </div>
           ))}
         </div>
-        <div style={{fontSize:11,color:"#4b5563",marginBottom:8}}>
-          {t.fechaInicio&&`Desde: ${t.fechaInicio}`}{t.fechaFin&&` · Hasta: ${t.fechaFin}`}
-          {t.observaciones&&<span style={{display:"block",marginTop:4,color:"#374151"}}>📝 {t.observaciones}</span>}
+      )}
+
+      {resto.length>0&&(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:"#4b5563",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Historial</div>
+          {resto.map(s=>(
+            <div key={s.id} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #1f2937",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Estac. #{s.estacId} — {s.nombre} → {s.nombreCedido}</div>
+                <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{s.fechaSolicitud||"—"} · Vence: {s.fechaVencP||"—"}</div>
+                {s.motivoRechazo&&<div style={{fontSize:10,color:"#f87171",marginTop:2}}>Motivo: {s.motivoRechazo}</div>}
+              </div>
+              {estadoBadge(s.estadoPrestamo)}
+            </div>
+          ))}
         </div>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>editar(t)} style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #1f2937",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:600,cursor:"pointer"}}>✏️ Editar</button>
-          <button onClick={()=>eliminar(t.id)} style={{flex:1,padding:"7px",borderRadius:7,border:"1px solid #7f1d1d",background:"rgba(127,29,29,.2)",color:"#ef4444",fontSize:11,fontWeight:600,cursor:"pointer"}}>🗑️ Eliminar</button>
+      )}
+
+      {/* Modal rechazar */}
+      {rechazarId&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+          <div style={{background:"#0f172a",borderRadius:16,padding:24,width:"100%",maxWidth:380,border:"1.5px solid #dc2626"}}>
+            <div style={{fontSize:14,fontWeight:800,color:"white",marginBottom:12}}>✕ Rechazar solicitud</div>
+            <label style={{fontSize:11,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:6}}>Motivo del rechazo <span style={{color:"#e53e3e"}}>*</span></label>
+            <textarea value={motivo} onChange={e=>setMotivo(e.target.value)} rows={3} placeholder="Ej: El beneficiario no está al día en el registro de copropietarios."
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #374151",background:"#1e293b",color:"white",outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+              <button onClick={()=>{setRechazarId(null);setMotivo("");}} style={{padding:"10px",borderRadius:8,border:"1.5px solid #374151",background:"transparent",color:"#94a3b8",fontWeight:700,fontSize:12,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={rechazar} disabled={!motivo.trim()} style={{padding:"10px",borderRadius:8,border:"none",background:motivo.trim()?"#dc2626":"#374151",color:"white",fontWeight:700,fontSize:12,cursor:motivo.trim()?"pointer":"not-allowed"}}>Confirmar rechazo</button>
+            </div>
+          </div>
         </div>
-      </div>;
-    })}
-  </div>;
+      )}
+    </div>
+  );
 };
 
 // ── STAFF ──
@@ -2086,7 +1438,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         </div>
         <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#0a0f1e",borderRadius:10,padding:3}}>
-          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["tecnicos","🔧","Técnicos"]].map(([k,icon,label])=>(
+          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["solicitudes","🤝","Solicitudes"]].map(([k,icon,label])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:tab===k?"#2563eb":"transparent",color:tab===k?"white":"#4b5563",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
               <span>{icon}</span><span>{label}</span>
             </button>
@@ -2158,7 +1510,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                 <option value="depto">Depto</option><option value="sector">Sector</option>
               </select>
               <button onClick={()=>{
-                const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso"};
+                const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
                 const tipoL={propietario_residente:"Prop. residente",propietario_arriendo:"Prop. no residente",arrendatario:"Arrendatario"};
                 const rows=[["Estac.","Torre","Depto","Sector","Nombre","Email","Teléfono","Tipo","Uso","Patentes","Actualizado"]];
                 listedSpots.forEach(s=>{
@@ -2198,19 +1550,34 @@ const StaffScreen = ({records,setRecords,onBack}) => {
               })}
             </div>
             <div style={{background:"#111827",borderRadius:14,overflow:"hidden",border:"1px solid #1f2937"}}>
-              <div style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 84px",padding:"8px 14px",background:"#0a0f1e",borderBottom:"1px solid #1f2937",fontSize:10,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5}}>
-                <span>Estac.</span><span>Torre</span><span>Depto</span><span>Patente(s)</span><span>Sector</span><span>Acciones</span>
+              <div style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"8px 14px",background:"#0a0f1e",borderBottom:"1px solid #1f2937",fontSize:10,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5}}>
+                <span>Estac.</span><span>Torre</span><span>Depto</span><span>Patente(s)</span><span>Sector</span><span>Fecha</span><span>Acciones</span>
               </div>
               {listedSpots.length===0&&<div style={{padding:32,textAlign:"center",color:"#374151",fontSize:13}}>{totalOcc===0?"No hay registros aún.":"Sin resultados."}</div>}
               {listedSpots.map((s,i)=>{
                 const rec=records[s.id],sc2=SC[s.sector];
-                return <div key={s.id} style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 84px",padding:"10px 14px",borderBottom:i<listedSpots.length-1?"1px solid #0f172a":"none",alignItems:"center",fontSize:12}}>
-                  <div style={{width:34,height:34,borderRadius:8,background:sc2.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:11,color:sc2.accent}}>#{s.id}</div>
+                const fechaReg=rec.createdAt?.toDate?.()?.toLocaleDateString("es-CL")||rec.fechaRegistro||rec.updatedAt?(new Date(rec.updatedAt)).toLocaleDateString("es-CL"):"—";
+                const esPendiente=rec.estadoRegistro==="pendiente";
+                return <div key={s.id} style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"10px 14px",borderBottom:i<listedSpots.length-1?"1px solid #0f172a":"none",alignItems:"center",fontSize:12,background:esPendiente?"rgba(245,158,11,.04)":"transparent"}}>
+                  <div style={{width:34,height:34,borderRadius:8,background:sc2.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:11,color:sc2.accent,position:"relative"}}>
+                    #{s.id}
+                    {esPendiente&&<div style={{position:"absolute",top:-4,right:-4,width:8,height:8,borderRadius:"50%",background:"#f59e0b",border:"1.5px solid #0a0f1e"}}/>}
+                  </div>
                   <span style={{color:"#94a3b8",fontFamily:"monospace",fontSize:11}}>{s.torre}</span>
                   <span style={{color:"#94a3b8",fontFamily:"monospace",fontWeight:700}}>{s.depto}</span>
-                  <div>{rec.patentes?.map((p,pi)=><span key={pi} style={{display:"inline-block",marginRight:4,marginBottom:2,padding:"2px 6px",borderRadius:5,background:sc2.bg,color:sc2.accent,fontFamily:"monospace",fontSize:11,fontWeight:700}}>{p}</span>)}{(rec.propietario||rec.nombre)&&<div style={{fontSize:10,color:"#374151",marginTop:2}}>{rec.propietario||rec.nombre}</div>}</div>
+                  <div>
+                    {rec.patentes?.map((p,pi)=><span key={pi} style={{display:"inline-block",marginRight:4,marginBottom:2,padding:"2px 6px",borderRadius:5,background:sc2.bg,color:sc2.accent,fontFamily:"monospace",fontSize:11,fontWeight:700}}>{p}</span>)}
+                    {(rec.propietario||rec.nombre)&&<div style={{fontSize:10,color:"#374151",marginTop:2}}>{rec.propietario||rec.nombre}</div>}
+                    {esPendiente&&<span style={{fontSize:9,background:"#fffbeb",color:"#92400e",padding:"1px 5px",borderRadius:4,fontWeight:700}}>⏳ Pendiente visado</span>}
+                  </div>
                   <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:6,height:6,borderRadius:1,background:sc2.accent}}/><span style={{fontSize:10,color:"#374151"}}>S{s.sector}</span></div>
-                  <div style={{display:"flex",gap:5}}>
+                  <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{fechaReg}</span>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {esPendiente&&<button onClick={async()=>{
+                      const {db,doc,updateDoc} = await getFirebase();
+                      await updateDoc(doc(db,"registros",String(s.id)),{estadoRegistro:"visado"});
+                      setRecords(r=>({...r,[s.id]:{...r[s.id],estadoRegistro:"visado"}}));
+                    }} style={{padding:"4px 7px",borderRadius:6,border:"1.5px solid #166534",background:"rgba(22,163,74,.15)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:700}} title="Visar registro">✅</button>}
                     <button onClick={()=>setSelectedSpot(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #1e3a5f",background:"rgba(37,99,235,.12)",color:"#60a5fa",cursor:"pointer",fontSize:13}}>✏️</button>
                     <button onClick={()=>setConfirmDelete(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #7f1d1d",background:"rgba(239,68,68,.1)",color:"#f87171",cursor:"pointer",fontSize:13}}>🗑</button>
                   </div>
@@ -2221,7 +1588,8 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         )}
 
-        {tab==="dashboard"&&(()=>{
+        {tab==="reclamos"&&<ReclamosTab/>}
+        {tab==="solicitudes"&&<SolicitudesTab records={records} setRecords={setRecords}/>}
           const totalSpots=SPOTS_DATA.length;
           const totalOcc2=Object.keys(records).length;
           const totalFree=totalSpots-totalOcc2;
@@ -2243,7 +1611,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           });
 
           // Por uso
-          const byUso={uso_exclusivo:0,visitas:0,ceder:0,sin_uso:0,otro:0};
+          const byUso={uso_exclusivo:0,visitas:0,ceder_largo:0,sin_uso:0,otro:0};
           Object.values(records).forEach(r=>{
             if(r.usoEstacionamiento&&byUso[r.usoEstacionamiento]!==undefined) byUso[r.usoEstacionamiento]++;
             else byUso.otro++;
@@ -2264,8 +1632,8 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           );
 
           const tipoL={propietario_residente:"Propietario residente",propietario_arriendo:"Propietario no residente",arrendatario:"Arrendatario",sin_tipo:"Sin especificar"};
-          const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",ceder_dias:"Préstamo por días",sin_uso:"Sin uso",otro:"Otro"};
-          const usoColors={uso_exclusivo:"#22c55e",visitas:"#3b82f6",ceder:"#a855f7",sin_uso:"#6b7280",otro:"#f59e0b"};
+          const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso",otro:"Otro"};
+          const usoColors={uso_exclusivo:"#22c55e",visitas:"#3b82f6",ceder_largo:"#a855f7",sin_uso:"#6b7280",otro:"#f59e0b"};
           const tipoColors={propietario_residente:"#22c55e",propietario_arriendo:"#3b82f6",arrendatario:"#f59e0b",sin_tipo:"#6b7280"};
 
           return <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -2354,8 +1722,6 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>}
           </div>;
         })()}
-
-        {tab==="map"&&(
           <div>
             {[1,2,3].map(sid=>{
               const sc2=SC[sid],sSpots=SPOTS_DATA.filter(s=>s.sector===sid),occ=sSpots.filter(s=>records[s.id]).length;
@@ -2382,9 +1748,6 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             })}
           </div>
         )}
-
-        {tab==="reclamos"&&<ReclamosTab/>}
-        {tab==="tecnicos"&&<TecnicosTab/>}
       </div>
 
       {selectedSpot&&<SpotModal spot={selectedSpot} record={records[selectedSpot.id]} onClose={()=>setSelectedSpot(null)}
@@ -2400,7 +1763,6 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 export default function App() {
   const [screen,setScreen]=useState("home");
   const [staffAuth,setStaffAuth]=useState(false);
-  const [staffUser,setStaffUser]=useState(null);
   const [records,setRecords]=useState({});
   const [loading,setLoading]=useState(true);
   const loadedRef=useRef(false);
@@ -2430,8 +1792,8 @@ export default function App() {
 
   if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
-    if(!staffAuth) return <StaffLogin onSuccess={(user)=>{setStaffAuth(true);setStaffUser(user);backupToDrive(records);}} onBack={()=>setScreen("home")}/>;
-    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);setStaffUser(null);}}/>;
+    if(!staffAuth) return <StaffLogin onSuccess={()=>setStaffAuth(true)} onBack={()=>setScreen("home")}/>;
+    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);}}/>;
   }
   return <HomeScreen onGo={setScreen}/>;
 }
