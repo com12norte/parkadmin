@@ -267,6 +267,117 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
   );
 };
 
+// ── HISTORIAL ──
+const loadHistorial = async (spotId) => {
+  try {
+    const res = await sbFetch(`historial?spotId=eq.${spotId}&order=created_at.desc&limit=20`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+};
+const addHistorial = async (spotId, accion, detalle) => {
+  try {
+    await sbFetch("historial", {
+      method:"POST",
+      headers:{"Prefer":"return=minimal"},
+      body:JSON.stringify({spotId, accion, detalle, created_at:new Date().toISOString()})
+    });
+  } catch(e) { /* silencioso */ }
+};
+
+// ── RECLAMO MODAL ──
+const ReclamoModal = ({spot, record, onClose, onSent}) => {
+  const [desc, setDesc] = useState("");
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const sc = SC[spot.sector];
+  const send = async () => {
+    if(!desc.trim()) return;
+    setSending(true);
+    try {
+      const p = new URLSearchParams({
+        tipo:"reclamo",
+        estac_id: spot.id,
+        sector: SECTOR_NAMES[spot.sector],
+        torre: spot.torre,
+        depto: spot.depto,
+        descripcion: desc,
+        email_reporta: email||"no indicado",
+        patentes: (record?.patentes||[]).join(", ")||"—",
+        nombre_registrado: record?.nombre||"—",
+        fecha: new Date().toLocaleString("es-CL"),
+      });
+      new Image().src = GAS_URL + "?" + p.toString();
+      onSent();
+      onClose();
+    } catch(e) { /* silencioso */ }
+    setSending(false);
+  };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20,backdropFilter:"blur(4px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"#0f172a",borderRadius:18,width:"100%",maxWidth:420,border:"1.5px solid #dc2626",boxShadow:"0 24px 64px rgba(0,0,0,.7)",overflow:"hidden"}}>
+        <div style={{background:"#7f1d1d",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:10,color:"#fca5a5",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Estac. #{spot.id} · {SECTOR_NAMES[spot.sector]}</div>
+            <div style={{fontSize:16,fontWeight:900,color:"white"}}>⚠️ Reportar ocupación indebida</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16}}>✕</button>
+        </div>
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{background:"#1e293b",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#94a3b8"}}>
+            <strong style={{color:"white"}}>Registrado a:</strong> {record?.nombre||"—"} · Patente(s): {(record?.patentes||[]).join(", ")||"—"}
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Tu correo (opcional)</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="para recibir respuesta"
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Descripción <span style={{color:"#e53e3e"}}>*</span></label>
+            <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3} placeholder="Describe brevemente la situación..."
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #1e3a5f",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={send} disabled={!desc.trim()||sending} style={{flex:1,padding:"10px",borderRadius:9,border:"none",background:desc.trim()?"#dc2626":"#374151",color:"white",fontWeight:800,fontSize:13,cursor:desc.trim()?"pointer":"not-allowed"}}>
+              {sending?"Enviando...":"Enviar reporte"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── RECLAMOS TAB ──
+const ReclamosTab = () => {
+  const [reclamos, setReclamos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    sbFetch("reclamos?order=created_at.desc&limit=50")
+      .then(r=>r.json())
+      .then(d=>{ setReclamos(Array.isArray(d)?d:[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  },[]);
+  if(loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando reclamos...</div>;
+  return (
+    <div>
+      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 16px"}}>⚠️ Reportes de ocupación indebida</h3>
+      {reclamos.length===0&&<div style={{textAlign:"center",padding:40,color:"#4b5563",fontSize:13}}>No hay reportes registrados.</div>}
+      {reclamos.map((r,i)=>(
+        <div key={i} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #1f2937"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+            <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{r.estac_id} — Torre {r.torre} · {r.depto}</div>
+            <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{r.created_at?new Date(r.created_at).toLocaleDateString("es-CL"):""}</span>
+          </div>
+          <div style={{fontSize:12,color:"#94a3b8",marginBottom:4}}>{r.descripcion}</div>
+          {r.email_reporta&&r.email_reporta!=="no indicado"&&<div style={{fontSize:10,color:"#4b5563"}}>Reportado por: {r.email_reporta}</div>}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ── Small components ──
 const Toast = ({msg,type}) => (
   <div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:type==="error"?"#7f1d1d":type==="info"?"#1e3a5f":"#064e3b",color:"white",padding:"12px 22px",borderRadius:12,fontSize:13,fontWeight:700,boxShadow:"0 8px 32px rgba(0,0,0,.4)",zIndex:400,whiteSpace:"nowrap",border:`1px solid ${type==="error"?"#dc2626":type==="info"?"#2563eb":"#16a34a"}`}}>
@@ -1593,6 +1704,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 
         {tab==="reclamos"&&<ReclamosTab/>}
         {tab==="solicitudes"&&<SolicitudesTab records={records} setRecords={setRecords}/>}
+        {tab==="dashboard"&&(()=>{
           const totalSpots=SPOTS_DATA.length;
           const totalOcc2=Object.keys(records).length;
           const totalFree=totalSpots-totalOcc2;
@@ -1725,6 +1837,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>}
           </div>;
         })()}
+        {tab==="map"&&(
           <div>
             {[1,2,3].map(sid=>{
               const sc2=SC[sid],sSpots=SPOTS_DATA.filter(s=>s.sector===sid),occ=sSpots.filter(s=>records[s.id]).length;
