@@ -638,6 +638,7 @@ const QueryTab = ({records}) => {
   const [queryTorre,setQueryTorre]=useState("");
   const [queryDepto,setQueryDepto]=useState("");
   const [result,setResult]=useState(null);
+  const [reclamo,setReclamo]=useState(null);
   const deptosFiltrados=queryTorre?DEPTOS_ALL.filter(d=>BY_TD[`${queryTorre}-${d}`]):[];
 
   const buscarPatente=()=>{
@@ -765,6 +766,7 @@ const QueryTab = ({records}) => {
           </button>
         </div>;
       })()}
+      {reclamo&&<ReclamoModal spot={reclamo.spot} record={reclamo.record} onClose={()=>setReclamo(null)} onSent={()=>setReclamo(null)}/>}
     </div>
   );
 };
