@@ -891,7 +891,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     // Verificar que esté en el padrón de copropietarios
     const enPadron=PADRON[`${form.torre}-${form.depto}`];
     if(!enPadron){
-      setErrors({lookup:"Esta unidad no está en el padrón de copropietarios. Contacta a la administración."});
+      setErrors({lookup:`UNIDAD NO REGISTRADA EN EL PADRÓN DE COPROPIETARIOS\n\nEstimado(a) Copropietario(a),\n\nPara poder registrar su estacionamiento, primero debe completar el registro de copropietarios. Le solicitamos adjuntar la siguiente documentación:\n\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\n\nSi usted arrienda la unidad, además debe adjuntar:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nLa Ley 21.445 (Art. 5°) establece que todo copropietario debe incorporarse al registro de copropietarios.\n\nComplete su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
       return;
     }
     setFound(spot);
@@ -1109,7 +1109,28 @@ Una vez visado, recibirás un correo de confirmación.`;
                       <option value="">— Selecciona letra/block —</option>
                       {deptosFiltrados.map(d=><option key={d} value={d}>{d}</option>)}
                     </select>
-                    {errors.lookup&&<span style={{fontSize:11,color:"#e53e3e",marginTop:4,display:"block"}}>{errors.lookup}</span>}
+                    {errors.lookup&&(
+                      <div style={{marginTop:8,padding:"14px 16px",borderRadius:10,background:"#fff1f2",border:"1.5px solid #fecaca"}}>
+                        {errors.lookup.startsWith("UNIDAD NO REGISTRADA")
+                          ? <div>
+                              <div style={{fontWeight:700,color:"#9f1239",fontSize:13,marginBottom:8}}>⚠️ Unidad no registrada en el padrón de copropietarios</div>
+                              {errors.lookup.split("\n").slice(1).map((line,i)=>{
+                                if(line.includes("https://forms.gle")){
+                                  const url=line.match(/https:\/\/\S+/)?.[0]||"";
+                                  return <p key={i} style={{margin:"6px 0",fontSize:12,color:"#1e293b"}}>
+                                    <a href={url} target="_blank" rel="noreferrer"
+                                       style={{color:"#0F2557",fontWeight:700,textDecoration:"underline"}}>
+                                      📝 Completar registro de copropietarios aquí
+                                    </a>
+                                  </p>;
+                                }
+                                return line.trim()?<p key={i} style={{margin:"4px 0",fontSize:12,color:"#374151"}}>{line}</p>:null;
+                              })}
+                            </div>
+                          : <span style={{fontSize:12,color:"#e53e3e"}}>{errors.lookup}</span>
+                        }
+                      </div>
+                    )}
                   </div>
                 </div>
                 {form.torre&&form.depto&&BY_TD[`${form.torre}-${form.depto}`]&&(()=>{
