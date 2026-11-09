@@ -22,7 +22,7 @@ const deleteRegistro = async (id) => {
 };
 
 // ── EMAILJS ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwNiZog9iqBei43v-RiEFe2xGHopqiMoQ6T223IpvcHREgclmSfRzDmq_EJ1WqRPxWILA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyfRIxKWuyv5C5wmyKWehVHCYJaTRMj4r8nHv0WCGPw2S5PyT2bP6gk-PoX5a3IFbH6kg/exec";
 
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
@@ -41,6 +41,37 @@ const sendEmail = async (params) => {
       }),
     });
   } catch(e) { console.error("Email error:",e); }
+};
+
+// Convierte File a base64
+const fileToBase64=(file)=>new Promise((res,rej)=>{
+  const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);
+});
+
+// Envío de comprobante con documentos adjuntos via GAS
+const sendComprobante = async ({to_email, asunto, cuerpo, archivos=[]}) => {
+  try {
+    const adjuntos=[];
+    for(const f of archivos){
+      if(!f)continue;
+      const b64=await fileToBase64(f);
+      adjuntos.push({nombre:f.name,tipo:f.type,datos:b64});
+    }
+    const p=new URLSearchParams({
+      tipo:"comprobante",
+      to_email,
+      asunto,
+      cuerpo,
+      adjuntos:JSON.stringify(adjuntos),
+    });
+    new Image().src=GAS_URL+"?"+p.toString();
+    // También POST para adjuntos grandes
+    if(adjuntos.length>0){
+      fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({tipo:"comprobante",to_email,asunto,cuerpo,adjuntos})
+      }).catch(()=>{});
+    }
+  } catch(e){ console.error("Comprobante error:",e); }
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -98,6 +129,70 @@ const TORRES_LABELS = {
 const TORRES = ["1052","1054","1036","1038","1061","1081","1060","1080"];
 const DEPTOS_ALL = ["A1","B2","C3","D4","E5","E6","F5","F6","G7","H8"];
 
+// ── PADRÓN DE COPROPIETARIOS ──
+// Generado desde "Registro de copropietarios (respuestas)" — solo el último registro por torre+depto
+const PADRON_RAW = [
+  {torre:"1036",depto:"A1",nombre:"Valentina Firelai Quevedo Candon",rut:"8562034-7",email:"Loslagosimnobiliaria@gmail.com"},
+  {torre:"1036",depto:"C3",nombre:"Fabian suazo",rut:"4208398-4",email:""},
+  {torre:"1036",depto:"D4",nombre:"Ana Maluenda Arenas",rut:"3482763-k",email:"amzamora@vtr.net"},
+  {torre:"1036",depto:"E5",nombre:"Sucesión Muñoz Rivera",rut:"6530814-2",email:"ceciliamr@vtr.net"},
+  {torre:"1036",depto:"F6",nombre:"Julio Edgardo Monje Fuentes",rut:"4827802-7",email:"monjesilva@gmail.com"},
+  {torre:"1036",depto:"H8",nombre:"Rolando Luis Rubilar Torrealba",rut:"15740319-2",email:"rolando.rubilar.t@gmail.com"},
+  {torre:"1038",depto:"A1",nombre:"Marcelo Andres Retamales Vivar",rut:"106579520",email:"mretamales.vi@gmail.com"},
+  {torre:"1038",depto:"B2",nombre:"Isolda oyaneder maturana",rut:"89988796-8",email:"Vladisilvaz@gmail.com"},
+  {torre:"1038",depto:"E5",nombre:"Claudia Julio",rut:"13427794-7",email:"cjulio.efi@gmail.com"},
+  {torre:"1038",depto:"F6",nombre:"María Isabel Fuentes Méndez",rut:"7095420-6",email:"mifuentesm@gmail.com"},
+  {torre:"1038",depto:"G7",nombre:"Katyhuska Polonsky",rut:"13429418-3",email:"Kata_polonsky@hotmail.com"},
+  {torre:"1038",depto:"H8",nombre:"",rut:"",email:""},
+  {torre:"1052",depto:"A1",nombre:"Rosa Amelia Espinoza Arancibia",rut:"10104371-1",email:"rosajuliaalonso@gmail.com"},
+  {torre:"1052",depto:"B2",nombre:"Claudia Pamela Rubilar Torrealba",rut:"12112923-k",email:"crubit@hotmail.com"},
+  {torre:"1052",depto:"E5",nombre:"Patricia Soledad Contreras Melo",rut:"10723809-3",email:"pscm67@yahoo.com"},
+  {torre:"1052",depto:"F6",nombre:"Sonia Alicia Hernandez Droguetts",rut:"5402257-3",email:"ramonmunozl46@gmail.com"},
+  {torre:"1052",depto:"G7",nombre:"Esteban Nicolás Safatle Poblete",rut:"17753788-8",email:"esafatle@gmail.com"},
+  {torre:"1052",depto:"H8",nombre:"FERNANDO EMILIO LOPEZ MARDONES",rut:"4693177-7",email:"FEL9317@GMAIL.COM"},
+  {torre:"1054",depto:"A1",nombre:"María Celia Otonel Llach",rut:"6073767-3",email:"maria.celia.otonel@gmail.com"},
+  {torre:"1054",depto:"B2",nombre:"Jacquellin Valenzuela Guerra",rut:"11825295-0",email:"Jacvalenzuela@gmail.com"},
+  {torre:"1054",depto:"C3",nombre:"Victoria Valentina Anacona Ortiz",rut:"16124346-9",email:"vic.anacona@gmail.com"},
+  {torre:"1054",depto:"E5",nombre:"Mariela Ortiz Pezoa",rut:"8432592-9",email:"mortizpezoa@gmail.com"},
+  {torre:"1054",depto:"F6",nombre:"Marcos Dalmazzo Apablaza",rut:"16200779-3",email:"Marcosdalmazzo@gmail.com"},
+  {torre:"1054",depto:"G7",nombre:"Rosa Boggiano Zelada",rut:"6217399-8",email:"Rossieboggiano@gmail.com"},
+  {torre:"1054",depto:"H8",nombre:"Haydee Elizabeth Galindo Viaux",rut:"9432381-9",email:"hgalindo72@yahoo.es"},
+  {torre:"1060",depto:"A1",nombre:"Patrcia Bernardita Gutierrez Briceño",rut:"4736384-5",email:"lidia.gutierrez@live.com"},
+  {torre:"1060",depto:"C3",nombre:"Ximena del Pilar Valderrama Perez",rut:"8082878-0",email:"Vakderramaximena43@gmail.com"},
+  {torre:"1060",depto:"D4",nombre:"Rodrigo Orlando Alzamora Salgado",rut:"9359383-9",email:"r.alzamora.s@gmail.com"},
+  {torre:"1060",depto:"E5",nombre:"Blanca Fuentes",rut:"5882377-5",email:"melittavidela@gmail.com"},
+  {torre:"1060",depto:"F6",nombre:"María del Pilar Valderrama Pérez",rut:"3365856-7",email:"mariadelpilarval@hotmail.com"},
+  {torre:"1060",depto:"G7",nombre:"Marcela Quezada Veloso",rut:"6815327-1",email:"mvquezadaveloso@gmail.com"},
+  {torre:"1060",depto:"H8",nombre:"Erica Patricia Bobadilla Morales",rut:"10078405-k",email:""},
+  {torre:"1061",depto:"A1",nombre:"",rut:"",email:""},
+  {torre:"1061",depto:"B2",nombre:"christian ilabaca dumont",rut:"15780359-k",email:"ilabacadumont@gmail.com"},
+  {torre:"1061",depto:"C3",nombre:"Felipe Muñoz Dominguez",rut:"6508878-9",email:"Felmu_3@hotmail.com"},
+  {torre:"1061",depto:"D4",nombre:"Patrio espinoza",rut:"5994913-6",email:"Espinozapatricio534@gmail.com"},
+  {torre:"1061",depto:"E5",nombre:"Marcelo Antonio Aravena Olmos",rut:"12102366-0",email:"arevenamarcelo1@gmail.com"},
+  {torre:"1061",depto:"F6",nombre:"Luis Patricio López Xufre",rut:"4140244-K",email:"lplopez_@hotmail.com"},
+  {torre:"1061",depto:"H8",nombre:"Karla Andrea Gotuzzo Muñoz",rut:"103620837",email:"karla.gotuzzo@gmail.com"},
+  {torre:"1080",depto:"A1",nombre:"Dolores Gladys Mora Díaz",rut:"12604139-K",email:"doloresmora@hotmail.com"},
+  {torre:"1080",depto:"C3",nombre:"Daniel Hernan Pradenas Daza",rut:"12120709-5",email:"Dani.pradenas@hotmail.com"},
+  {torre:"1080",depto:"D4",nombre:"María de la Luz Scholl",rut:"8937439-1",email:"mariadelaluzscholl@gmail.com"},
+  {torre:"1080",depto:"E5",nombre:"Carolina Pradenas / Pablo Pradenas",rut:"14000940-7",email:"carolinapradenas@hotmail.com"},
+  {torre:"1080",depto:"F6",nombre:"Paco González Ulibarry",rut:"16006273-8",email:"paco.g.u@gmail.com"},
+  {torre:"1080",depto:"G7",nombre:"Edgardo Yáñez Cueto",rut:"6156002-5",email:"materiaslenguaje@yahoo.es"},
+  {torre:"1080",depto:"H8",nombre:"Silvia zepeda",rut:"3726847-k",email:""},
+  {torre:"1081",depto:"A1",nombre:"MARCELA ALEJANDRA VILLALÓN ACEVEDO",rut:"16775721-9",email:"marcela777@gmail.com"},
+  {torre:"1081",depto:"B2",nombre:"Marcia Verónica Moya Quintela",rut:"8267577-9",email:"marcia.moya.quintela30@gmail.com"},
+  {torre:"1081",depto:"C3",nombre:"Eduardo Enrique Durán Araya",rut:"6940607-6",email:"eduranok@gmail.com"},
+  {torre:"1081",depto:"D4",nombre:"Jaime antonio bustos valencia",rut:"5413179-8",email:""},
+  {torre:"1081",depto:"F6",nombre:"Begoña Rita Fernanda Ulibarry Ubiergo",rut:"8827422-9",email:"begoulibarry@gmail.com"},
+  {torre:"1081",depto:"G7",nombre:"Miguel oviedo parra",rut:"9333987-8",email:"Mioviedo@me.com"},
+  {torre:"1081",depto:"H8",nombre:"Makarena del rosario soto jara",rut:"17978817-9",email:"Makarenadelr.soto@gmail.com"},
+];
+// índice rápido torre-depto
+const PADRON = {};
+PADRON_RAW.forEach(p => { if(p.nombre) PADRON[`${p.torre}-${p.depto}`] = p; });
+
+// Email del administrador
+const ADMIN_EMAIL = "paco.g.u@gmail.com";
+
 const validarTelefono = (tel) => {
   if(!tel?.trim()) return null;
   const clean = tel.replace(/[\s\-\+\(\)]/g,'').replace(/^56/,'');
@@ -109,7 +204,8 @@ const validarTelefono = (tel) => {
 
 function emptyForm() {
   return {
-    torre:"",depto:"",tipoResidente:"",nombre:"",email:"",telefono:"",
+    torre:"",depto:"",tipoResidente:"",nombre:"",rut:"",email:"",telefono:"",
+    carnetFrontal:null,carnetTrasero:null,
     usoEstacionamiento:"",nombreCedido:"",rutCedido:"",emailCedido:"",telefonoCedido:"",torreCedido:"",deptoCedido:"",docCedido:null,
     vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]
   };
@@ -792,6 +888,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!form.torre||!form.depto){setErrors({lookup:"Selecciona dirección y departamento"});return;}
     const spot=BY_TD[`${form.torre}-${form.depto}`]||null;
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
+    // Verificar que esté en el padrón de copropietarios
+    const enPadron=PADRON[`${form.torre}-${form.depto}`];
+    if(!enPadron){
+      setErrors({lookup:"Esta unidad no está en el padrón de copropietarios. Contacta a la administración."});
+      return;
+    }
     setFound(spot);
     const rec=records[spot.id];
     if(rec&&rec.email){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
@@ -813,8 +915,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     const e={};
     if(s===1){
       if(!form.nombre.trim())e.nombre="Requerido";
+      if(!form.rut?.trim())e.rut="Requerido para verificar identidad";
       if(!form.tipoResidente)e.tipoResidente="Selecciona una opción";
       if(form.telefono){const err=validarTelefono(form.telefono);if(err)e.telefono=err;}
+      if(!form.carnetFrontal)e.carnetFrontal="Debes adjuntar foto frontal del carnet";
+      if(!form.carnetTrasero)e.carnetTrasero="Debes adjuntar foto trasera del carnet";
     }
     if(s===2){
       if(!form.usoEstacionamiento)e.usoEstacionamiento="Selecciona una opción";
@@ -842,7 +947,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!found)return;
     const veh=form.vehiculos.filter(v=>v.patente.trim());
     const data={
-      nombre:form.nombre,email:form.email,telefono:form.telefono,
+      nombre:form.nombre,rut:form.rut,email:form.email,telefono:form.telefono,
       tipoResidente:form.tipoResidente,usoEstacionamiento:form.usoEstacionamiento,
       vehiculos:veh,patentes:veh.map(v=>v.patente.toUpperCase().replace(/[^A-Z0-9]/g,"")),
       ...(form.usoEstacionamiento==="ceder_largo"?{
@@ -858,6 +963,20 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     };
     setRecords(r=>({...r,[found.id]:data}));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
+    const padronInfo=PADRON[`${found.torre}-${found.depto}`];
+    const fechaStr=new Date().toLocaleString("es-CL");
+    const resumen=`Estacionamiento #${found.id} · ${SECTOR_NAMES[found.sector]}
+Torre: ${TORRES_LABELS[found.torre]||found.torre} · Depto: ${found.depto}
+Propietario padrón: ${padronInfo?.nombre||"—"}
+Residente registrado: ${form.nombre}
+RUT declarado: ${form.rut||"—"}
+RUT propietario padrón: ${padronInfo?.rut||"—"}
+Tipo residente: ${form.tipoResidente||"—"}
+Teléfono: ${form.telefono||"—"}
+Uso: ${usoL[form.usoEstacionamiento]||form.usoEstacionamiento}
+Patentes: ${veh.map(v=>v.patente).join(", ")||"—"}
+Fecha registro: ${fechaStr}
+Estado: Pendiente de visado por administración`;
     const emailParams={
       nombre:form.nombre,
       torre:TORRES_LABELS[found.torre]||found.torre,
@@ -866,12 +985,45 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       patentes:veh.map(v=>v.patente).join(", ")||"—",
       telefono:form.telefono||"—",
       uso:usoL[form.usoEstacionamiento]||form.usoEstacionamiento,
-      fecha:new Date().toLocaleString("es-CL"),
+      fecha:fechaStr,
       sector:SECTOR_NAMES[found.sector],
       email_residente:form.email||"",
+      propietario_padron:padronInfo?.nombre||"—",
+      rut_declarado:form.rut||"—",
+      rut_propietario:padronInfo?.rut||"—",
+      tipo_residente:form.tipoResidente||"—",
+      adjunta_carnet:form.carnetFrontal?"Sí (adjunto)":"No adjuntó",
+      resumen_registro:resumen,
+      estado:"⏳ Pendiente de aprobación por administración",
     };
-    sendEmail({...emailParams});
-    if(form.email?.trim()) sendEmail({...emailParams,to_email:form.email.trim()});
+    const asuntoResidente=`Comprobante de registro — Estacionamiento #${found.id} — Pendiente de aprobación`;
+    const asuntoAdmin=`[NUEVO REGISTRO] Estac. #${found.id} — ${form.nombre} — REQUIERE VISADO`;
+    const cuerpoComprobante=`COMPROBANTE DE REGISTRO — PENDIENTE DE VISADO
+=============================================
+${resumen}
+
+📸 Documentos adjuntos:
+- Cédula frontal: ${form.carnetFrontal?form.carnetFrontal.name:"No adjuntada"}
+- Cédula trasera: ${form.carnetTrasero?form.carnetTrasero.name:"No adjuntada"}
+
+Este registro debe ser aprobado por la administración.
+Una vez visado, recibirás un correo de confirmación.`;
+    // Comprobante con carnets al residente
+    if(form.email?.trim()){
+      sendComprobante({
+        to_email:form.email.trim(),
+        asunto:asuntoResidente,
+        cuerpo:cuerpoComprobante,
+        archivos:[form.carnetFrontal,form.carnetTrasero].filter(Boolean),
+      });
+    }
+    // Notificación al administrador con carnets para verificación
+    sendComprobante({
+      to_email:ADMIN_EMAIL,
+      asunto:asuntoAdmin,
+      cuerpo:`NUEVO REGISTRO REQUIERE VISADO\n=============================================\n${resumen}\n\n📸 Cédula adjunta para verificación de identidad:\n- Frontal: ${form.carnetFrontal?form.carnetFrontal.name:"No adjuntada"}\n- Trasera: ${form.carnetTrasero?form.carnetTrasero.name:"No adjuntada"}`,
+      archivos:[form.carnetFrontal,form.carnetTrasero].filter(Boolean),
+    });
     // Historial
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
@@ -962,9 +1114,25 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                 </div>
                 {form.torre&&form.depto&&BY_TD[`${form.torre}-${form.depto}`]&&(()=>{
                   const prev=BY_TD[`${form.torre}-${form.depto}`],sc0=SC[prev.sector];
-                  return <div style={{marginTop:16,padding:"12px 16px",borderRadius:10,background:sc0.accent+"18",border:`1.5px solid ${sc0.accent}40`,display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:10,background:sc0.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:14,color:sc0.accent}}>#{prev.id}</div>
-                    <div><div style={{fontSize:11,color:sc0.spotOcc,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Estacionamiento asignado ✓</div><div style={{fontSize:13,color:"#0f172a",fontWeight:600}}>{SECTOR_NAMES[prev.sector]}</div></div>
+                  const propietarioPadron=PADRON[`${form.torre}-${form.depto}`];
+                  return <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:8}}>
+                    <div style={{padding:"12px 16px",borderRadius:10,background:sc0.accent+"18",border:`1.5px solid ${sc0.accent}40`,display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:44,height:44,borderRadius:10,background:sc0.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:14,color:sc0.accent}}>#{prev.id}</div>
+                      <div><div style={{fontSize:11,color:sc0.spotOcc,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Estacionamiento asignado ✓</div><div style={{fontSize:13,color:"#0f172a",fontWeight:600}}>{SECTOR_NAMES[prev.sector]}</div></div>
+                    </div>
+                    {propietarioPadron?
+                      <div style={{padding:"10px 14px",borderRadius:10,background:"#f0fdf4",border:"1.5px solid #bbf7d0",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>✅</span>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#166534",textTransform:"uppercase"}}>Unidad registrada en el padrón</div>
+                          <div style={{fontSize:12,color:"#15803d",fontWeight:600}}>{propietarioPadron.nombre}</div>
+                        </div>
+                      </div>:
+                      <div style={{padding:"10px 14px",borderRadius:10,background:"#fff1f2",border:"1.5px solid #fecdd3",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>⚠️</span>
+                        <div style={{fontSize:11,color:"#9f1239"}}>Esta unidad no está en el padrón. Contacta a administración.</div>
+                      </div>
+                    }
                   </div>;
                 })()}
                 <button onClick={handleLookup} style={{width:"100%",marginTop:20,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,.35)"}}>Continuar →</button>
@@ -1017,7 +1185,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                     {radioBtn("tipoResidente","propietario_arriendo","Propietario no residente (arrienda)")}
                     {radioBtn("tipoResidente","arrendatario","Arrendatario / Ocupante")}
                   </div>
-                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["email","5. Correo electrónico","correo@ejemplo.com","email",false],["telefono","6. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
+                  {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["rut","5. RUT / DNI","Ej: 12.345.678-9","text",true],["email","6. Correo electrónico","correo@ejemplo.com","email",false],["telefono","7. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
                       <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph}
@@ -1025,6 +1193,35 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
                       {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                     </div>
                   ))}
+                  {/* Carnet de identidad — verificación de identidad */}
+                  <div style={{background:"#fffbeb",borderRadius:12,padding:14,border:"1.5px solid #fde68a"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:4,display:"flex",alignItems:"center",gap:6}}>
+                      🪪 Verificación de identidad — Cédula de identidad <span style={{color:"#e53e3e"}}>*</span>
+                    </div>
+                    <div style={{fontSize:11,color:"#78350f",marginBottom:12,lineHeight:1.4}}>
+                      Para confirmar que eres el titular del estacionamiento, adjunta fotos de tu cédula de identidad. Los datos serán revisados por la administración al aprobar el registro.
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>CARA FRONTAL <span style={{color:"#e53e3e"}}>*</span></label>
+                        <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px 8px",borderRadius:8,border:`2px dashed ${errors.carnetFrontal?"#e53e3e":form.carnetFrontal?"#16a34a":"#d97706"}`,background:form.carnetFrontal?"#f0fdf4":"white",cursor:"pointer",gap:4,minHeight:70}}>
+                          <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setF("carnetFrontal",f);}}/>
+                          <span style={{fontSize:18}}>{form.carnetFrontal?"✅":"📷"}</span>
+                          <span style={{fontSize:10,fontWeight:600,color:form.carnetFrontal?"#16a34a":"#92400e",textAlign:"center"}}>{form.carnetFrontal?form.carnetFrontal.name.slice(0,20):"Foto frontal"}</span>
+                        </label>
+                        {errors.carnetFrontal&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.carnetFrontal}</span>}
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>CARA TRASERA <span style={{color:"#e53e3e"}}>*</span></label>
+                        <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px 8px",borderRadius:8,border:`2px dashed ${errors.carnetTrasero?"#e53e3e":form.carnetTrasero?"#16a34a":"#d97706"}`,background:form.carnetTrasero?"#f0fdf4":"white",cursor:"pointer",gap:4,minHeight:70}}>
+                          <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setF("carnetTrasero",f);}}/>
+                          <span style={{fontSize:18}}>{form.carnetTrasero?"✅":"📷"}</span>
+                          <span style={{fontSize:10,fontWeight:600,color:form.carnetTrasero?"#16a34a":"#92400e",textAlign:"center"}}>{form.carnetTrasero?form.carnetTrasero.name.slice(0,20):"Foto trasera"}</span>
+                        </label>
+                        {errors.carnetTrasero&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors.carnetTrasero}</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div style={{display:"flex",gap:10,marginTop:20}}>
                   <button onClick={()=>setStep(0)} style={{padding:"11px 20px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>← Atrás</button>
@@ -1380,8 +1577,21 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
                   <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
                 </div>
                 <button onClick={async()=>{
-                  await sbFetch(`registros?id=eq.${id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado"})});
-                  setRecords(prev=>({...prev,[id]:{...prev[id],estadoRegistro:"visado"}}));
+                  await sbFetch(`registros?id=eq.${id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado",fechaVisado:new Date().toISOString()})});
+                  setRecords(prev=>({...prev,[id]:{...prev[id],estadoRegistro:"visado",fechaVisado:new Date().toISOString()}}));
+                  // Email de confirmación al residente
+                  if(r.email) sendEmail({
+                    to_email:r.email,
+                    nombre:r.nombre||"Residente",
+                    estac_id:id,
+                    torre:r.torre||"—",
+                    depto:r.depto||"—",
+                    patentes:(r.patentes||[]).join(", ")||"—",
+                    fecha:new Date().toLocaleString("es-CL"),
+                    estado:"✅ REGISTRO APROBADO — Tu estacionamiento ha sido visado por la administración.",
+                    resumen_registro:`Tu registro del estacionamiento #${id} fue aprobado el ${new Date().toLocaleString("es-CL")}. Patentes autorizadas: ${(r.patentes||[]).join(", ")||"—"}.`,
+                    asunto_extra:`[APROBADO] Tu estacionamiento #${id} fue visado`,
+                  });
                 }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#16a34a",color:"white",fontWeight:700,fontSize:11,cursor:"pointer",flexShrink:0,marginLeft:10}}>✅ Visar</button>
               </div>
             ))}
