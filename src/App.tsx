@@ -22,7 +22,7 @@ const deleteRegistro = async (id) => {
 };
 
 // ── EMAILJS ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyfRIxKWuyv5C5wmyKWehVHCYJaTRMj4r8nHv0WCGPw2S5PyT2bP6gk-PoX5a3IFbH6kg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw0aYEMmkyMIrKT4fUMcfZlnDhg16OuXnfyUK-cKuyjp02acvOkS0DZc53S-oTQO0ZDKQ/exec";
 
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
@@ -43,35 +43,52 @@ const sendEmail = async (params) => {
   } catch(e) { console.error("Email error:",e); }
 };
 
-// Convierte File a base64
+// Convierte File a base64 (data URL)
 const fileToBase64=(file)=>new Promise((res,rej)=>{
   const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);
 });
 
-// Envío de comprobante con documentos adjuntos via GAS
-const sendComprobante = async ({to_email, asunto, cuerpo, archivos=[]}) => {
+// Reduce la foto de la cédula (máx. 1400 px, JPEG) para que el envío sea liviano.
+// Si el navegador no puede procesarla, se envía el archivo original.
+const prepararAdjunto=async(file)=>{
+  const original=await fileToBase64(file);
+  if(!file.type||!file.type.startsWith("image/"))return{nombre:file.name,tipo:file.type||"application/octet-stream",datos:original};
+  try{
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=original;});
+    const max=1400,esc=Math.min(1,max/Math.max(img.width,img.height));
+    const c=document.createElement("canvas");
+    c.width=Math.round(img.width*esc);c.height=Math.round(img.height*esc);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const datos=c.toDataURL("image/jpeg",0.75);
+    if(!datos.startsWith("data:image/jpeg"))throw new Error("sin jpeg");
+    return{nombre:file.name.replace(/\.[^.]+$/,"")+".jpg",tipo:"image/jpeg",datos};
+  }catch(e){return{nombre:file.name,tipo:file.type,datos:original};}
+};
+
+// Envío del comprobante con la cédula adjunta. Una sola llamada: el servidor (GAS)
+// envía el correo al residente y el aviso de visado a la administración.
+// Se usa POST "text/plain" + no-cors porque es lo que Apps Script acepta desde el navegador.
+const sendComprobante = async ({datos={}, archivos=[]}) => {
   try {
     const adjuntos=[];
-    for(const f of archivos){
-      if(!f)continue;
-      const b64=await fileToBase64(f);
-      adjuntos.push({nombre:f.name,tipo:f.type,datos:b64});
-    }
-    const p=new URLSearchParams({
-      tipo:"comprobante",
-      to_email,
-      asunto,
-      cuerpo,
-      adjuntos:JSON.stringify(adjuntos),
+    for(const f of archivos){ if(f) adjuntos.push(await prepararAdjunto(f)); }
+    await fetch(GAS_URL,{
+      method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({tipo:"comprobante",...datos,adjuntos}),
     });
-    new Image().src=GAS_URL+"?"+p.toString();
-    // También POST para adjuntos grandes
-    if(adjuntos.length>0){
-      fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({tipo:"comprobante",to_email,asunto,cuerpo,adjuntos})
-      }).catch(()=>{});
-    }
-  } catch(e){ console.error("Comprobante error:",e); }
+    return true;
+  } catch(e){ console.error("Comprobante error:",e); return false; }
+};
+
+// Consulta al servidor si la unidad está en el padrón de copropietarios.
+// El padrón (nombres, RUT, correos) nunca se descarga al navegador.
+const consultarPadron = async (torre, depto) => {
+  const p=new URLSearchParams({tipo:"verificar_padron",torre,depto});
+  const res=await fetch(GAS_URL+"?"+p.toString());
+  const j=await res.json();
+  if(!j||j.ok!==true)throw new Error("respuesta inválida");
+  return !!j.enPadron;
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -128,70 +145,6 @@ const TORRES_LABELS = {
 };
 const TORRES = ["1052","1054","1036","1038","1061","1081","1060","1080"];
 const DEPTOS_ALL = ["A1","B2","C3","D4","E5","E6","F5","F6","G7","H8"];
-
-// ── PADRÓN DE COPROPIETARIOS ──
-// Generado desde "Registro de copropietarios (respuestas)" — solo el último registro por torre+depto
-const PADRON_RAW = [
-  {torre:"1036",depto:"A1",nombre:"Valentina Firelai Quevedo Candon",rut:"8562034-7",email:"Loslagosimnobiliaria@gmail.com"},
-  {torre:"1036",depto:"C3",nombre:"Fabian suazo",rut:"4208398-4",email:""},
-  {torre:"1036",depto:"D4",nombre:"Ana Maluenda Arenas",rut:"3482763-k",email:"amzamora@vtr.net"},
-  {torre:"1036",depto:"E5",nombre:"Sucesión Muñoz Rivera",rut:"6530814-2",email:"ceciliamr@vtr.net"},
-  {torre:"1036",depto:"F6",nombre:"Julio Edgardo Monje Fuentes",rut:"4827802-7",email:"monjesilva@gmail.com"},
-  {torre:"1036",depto:"H8",nombre:"Rolando Luis Rubilar Torrealba",rut:"15740319-2",email:"rolando.rubilar.t@gmail.com"},
-  {torre:"1038",depto:"A1",nombre:"Marcelo Andres Retamales Vivar",rut:"106579520",email:"mretamales.vi@gmail.com"},
-  {torre:"1038",depto:"B2",nombre:"Isolda oyaneder maturana",rut:"89988796-8",email:"Vladisilvaz@gmail.com"},
-  {torre:"1038",depto:"E5",nombre:"Claudia Julio",rut:"13427794-7",email:"cjulio.efi@gmail.com"},
-  {torre:"1038",depto:"F6",nombre:"María Isabel Fuentes Méndez",rut:"7095420-6",email:"mifuentesm@gmail.com"},
-  {torre:"1038",depto:"G7",nombre:"Katyhuska Polonsky",rut:"13429418-3",email:"Kata_polonsky@hotmail.com"},
-  {torre:"1038",depto:"H8",nombre:"",rut:"",email:""},
-  {torre:"1052",depto:"A1",nombre:"Rosa Amelia Espinoza Arancibia",rut:"10104371-1",email:"rosajuliaalonso@gmail.com"},
-  {torre:"1052",depto:"B2",nombre:"Claudia Pamela Rubilar Torrealba",rut:"12112923-k",email:"crubit@hotmail.com"},
-  {torre:"1052",depto:"E5",nombre:"Patricia Soledad Contreras Melo",rut:"10723809-3",email:"pscm67@yahoo.com"},
-  {torre:"1052",depto:"F6",nombre:"Sonia Alicia Hernandez Droguetts",rut:"5402257-3",email:"ramonmunozl46@gmail.com"},
-  {torre:"1052",depto:"G7",nombre:"Esteban Nicolás Safatle Poblete",rut:"17753788-8",email:"esafatle@gmail.com"},
-  {torre:"1052",depto:"H8",nombre:"FERNANDO EMILIO LOPEZ MARDONES",rut:"4693177-7",email:"FEL9317@GMAIL.COM"},
-  {torre:"1054",depto:"A1",nombre:"María Celia Otonel Llach",rut:"6073767-3",email:"maria.celia.otonel@gmail.com"},
-  {torre:"1054",depto:"B2",nombre:"Jacquellin Valenzuela Guerra",rut:"11825295-0",email:"Jacvalenzuela@gmail.com"},
-  {torre:"1054",depto:"C3",nombre:"Victoria Valentina Anacona Ortiz",rut:"16124346-9",email:"vic.anacona@gmail.com"},
-  {torre:"1054",depto:"E5",nombre:"Mariela Ortiz Pezoa",rut:"8432592-9",email:"mortizpezoa@gmail.com"},
-  {torre:"1054",depto:"F6",nombre:"Marcos Dalmazzo Apablaza",rut:"16200779-3",email:"Marcosdalmazzo@gmail.com"},
-  {torre:"1054",depto:"G7",nombre:"Rosa Boggiano Zelada",rut:"6217399-8",email:"Rossieboggiano@gmail.com"},
-  {torre:"1054",depto:"H8",nombre:"Haydee Elizabeth Galindo Viaux",rut:"9432381-9",email:"hgalindo72@yahoo.es"},
-  {torre:"1060",depto:"A1",nombre:"Patrcia Bernardita Gutierrez Briceño",rut:"4736384-5",email:"lidia.gutierrez@live.com"},
-  {torre:"1060",depto:"C3",nombre:"Ximena del Pilar Valderrama Perez",rut:"8082878-0",email:"Vakderramaximena43@gmail.com"},
-  {torre:"1060",depto:"D4",nombre:"Rodrigo Orlando Alzamora Salgado",rut:"9359383-9",email:"r.alzamora.s@gmail.com"},
-  {torre:"1060",depto:"E5",nombre:"Blanca Fuentes",rut:"5882377-5",email:"melittavidela@gmail.com"},
-  {torre:"1060",depto:"F6",nombre:"María del Pilar Valderrama Pérez",rut:"3365856-7",email:"mariadelpilarval@hotmail.com"},
-  {torre:"1060",depto:"G7",nombre:"Marcela Quezada Veloso",rut:"6815327-1",email:"mvquezadaveloso@gmail.com"},
-  {torre:"1060",depto:"H8",nombre:"Erica Patricia Bobadilla Morales",rut:"10078405-k",email:""},
-  {torre:"1061",depto:"A1",nombre:"",rut:"",email:""},
-  {torre:"1061",depto:"B2",nombre:"christian ilabaca dumont",rut:"15780359-k",email:"ilabacadumont@gmail.com"},
-  {torre:"1061",depto:"C3",nombre:"Felipe Muñoz Dominguez",rut:"6508878-9",email:"Felmu_3@hotmail.com"},
-  {torre:"1061",depto:"D4",nombre:"Patrio espinoza",rut:"5994913-6",email:"Espinozapatricio534@gmail.com"},
-  {torre:"1061",depto:"E5",nombre:"Marcelo Antonio Aravena Olmos",rut:"12102366-0",email:"arevenamarcelo1@gmail.com"},
-  {torre:"1061",depto:"F6",nombre:"Luis Patricio López Xufre",rut:"4140244-K",email:"lplopez_@hotmail.com"},
-  {torre:"1061",depto:"H8",nombre:"Karla Andrea Gotuzzo Muñoz",rut:"103620837",email:"karla.gotuzzo@gmail.com"},
-  {torre:"1080",depto:"A1",nombre:"Dolores Gladys Mora Díaz",rut:"12604139-K",email:"doloresmora@hotmail.com"},
-  {torre:"1080",depto:"C3",nombre:"Daniel Hernan Pradenas Daza",rut:"12120709-5",email:"Dani.pradenas@hotmail.com"},
-  {torre:"1080",depto:"D4",nombre:"María de la Luz Scholl",rut:"8937439-1",email:"mariadelaluzscholl@gmail.com"},
-  {torre:"1080",depto:"E5",nombre:"Carolina Pradenas / Pablo Pradenas",rut:"14000940-7",email:"carolinapradenas@hotmail.com"},
-  {torre:"1080",depto:"F6",nombre:"Paco González Ulibarry",rut:"16006273-8",email:"paco.g.u@gmail.com"},
-  {torre:"1080",depto:"G7",nombre:"Edgardo Yáñez Cueto",rut:"6156002-5",email:"materiaslenguaje@yahoo.es"},
-  {torre:"1080",depto:"H8",nombre:"Silvia zepeda",rut:"3726847-k",email:""},
-  {torre:"1081",depto:"A1",nombre:"MARCELA ALEJANDRA VILLALÓN ACEVEDO",rut:"16775721-9",email:"marcela777@gmail.com"},
-  {torre:"1081",depto:"B2",nombre:"Marcia Verónica Moya Quintela",rut:"8267577-9",email:"marcia.moya.quintela30@gmail.com"},
-  {torre:"1081",depto:"C3",nombre:"Eduardo Enrique Durán Araya",rut:"6940607-6",email:"eduranok@gmail.com"},
-  {torre:"1081",depto:"D4",nombre:"Jaime antonio bustos valencia",rut:"5413179-8",email:""},
-  {torre:"1081",depto:"F6",nombre:"Begoña Rita Fernanda Ulibarry Ubiergo",rut:"8827422-9",email:"begoulibarry@gmail.com"},
-  {torre:"1081",depto:"G7",nombre:"Miguel oviedo parra",rut:"9333987-8",email:"Mioviedo@me.com"},
-  {torre:"1081",depto:"H8",nombre:"Makarena del rosario soto jara",rut:"17978817-9",email:"Makarenadelr.soto@gmail.com"},
-];
-// índice rápido torre-depto
-const PADRON = {};
-PADRON_RAW.forEach(p => { if(p.nombre) PADRON[`${p.torre}-${p.depto}`] = p; });
-
-// Email del administrador
-const ADMIN_EMAIL = "paco.g.u@gmail.com";
 
 const validarTelefono = (tel) => {
   if(!tel?.trim()) return null;
@@ -882,14 +835,24 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
 
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);};
 
+  const [verificando,setVerificando]=useState(false);
   const setF=(k,v)=>{setFormState(f=>({...f,[k]:v}));setErrors(e=>({...e,[k]:""}));};
 
-  const handleLookup=()=>{
+  const handleLookup=async()=>{
+    if(verificando)return;
     if(!form.torre||!form.depto){setErrors({lookup:"Selecciona dirección y departamento"});return;}
     const spot=BY_TD[`${form.torre}-${form.depto}`]||null;
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
-    // Verificar que esté en el padrón de copropietarios
-    const enPadron=PADRON[`${form.torre}-${form.depto}`];
+    // Verificar en el servidor que la unidad esté en el padrón de copropietarios
+    setVerificando(true);setErrors({});
+    let enPadron=false;
+    try{ enPadron=await consultarPadron(form.torre,form.depto); }
+    catch(e){
+      setVerificando(false);
+      setErrors({lookup:"No se pudo verificar el padrón de copropietarios. Revisa tu conexión e inténtalo nuevamente."});
+      return;
+    }
+    setVerificando(false);
     if(!enPadron){
       setErrors({lookup:`UNIDAD NO REGISTRADA EN EL PADRÓN DE COPROPIETARIOS\n\nEstimado(a) Copropietario(a),\n\nPara poder registrar su estacionamiento, primero debe completar el registro de copropietarios. Le solicitamos adjuntar la siguiente documentación:\n\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\n\nSi usted arrienda la unidad, además debe adjuntar:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nLa Ley 21.445 (Art. 5°) establece que todo copropietario debe incorporarse al registro de copropietarios.\n\nComplete su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
       return;
@@ -963,14 +926,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     };
     setRecords(r=>({...r,[found.id]:data}));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
-    const padronInfo=PADRON[`${found.torre}-${found.depto}`];
     const fechaStr=new Date().toLocaleString("es-CL");
     const resumen=`Estacionamiento #${found.id} · ${SECTOR_NAMES[found.sector]}
 Torre: ${TORRES_LABELS[found.torre]||found.torre} · Depto: ${found.depto}
-Propietario padrón: ${padronInfo?.nombre||"—"}
 Residente registrado: ${form.nombre}
 RUT declarado: ${form.rut||"—"}
-RUT propietario padrón: ${padronInfo?.rut||"—"}
 Tipo residente: ${form.tipoResidente||"—"}
 Teléfono: ${form.telefono||"—"}
 Uso: ${usoL[form.usoEstacionamiento]||form.usoEstacionamiento}
@@ -988,16 +948,12 @@ Estado: Pendiente de visado por administración`;
       fecha:fechaStr,
       sector:SECTOR_NAMES[found.sector],
       email_residente:form.email||"",
-      propietario_padron:padronInfo?.nombre||"—",
       rut_declarado:form.rut||"—",
-      rut_propietario:padronInfo?.rut||"—",
       tipo_residente:form.tipoResidente||"—",
       adjunta_carnet:form.carnetFrontal?"Sí (adjunto)":"No adjuntó",
       resumen_registro:resumen,
       estado:"⏳ Pendiente de aprobación por administración",
     };
-    const asuntoResidente=`Comprobante de registro — Estacionamiento #${found.id} — Pendiente de aprobación`;
-    const asuntoAdmin=`[NUEVO REGISTRO] Estac. #${found.id} — ${form.nombre} — REQUIERE VISADO`;
     const cuerpoComprobante=`COMPROBANTE DE REGISTRO — PENDIENTE DE VISADO
 =============================================
 ${resumen}
@@ -1008,22 +964,19 @@ ${resumen}
 
 Este registro debe ser aprobado por la administración.
 Una vez visado, recibirás un correo de confirmación.`;
-    // Comprobante con carnets al residente
-    if(form.email?.trim()){
-      sendComprobante({
-        to_email:form.email.trim(),
-        asunto:asuntoResidente,
-        cuerpo:cuerpoComprobante,
-        archivos:[form.carnetFrontal,form.carnetTrasero].filter(Boolean),
-      });
-    }
-    // Notificación al administrador con carnets para verificación
+    // Comprobante con la cédula: el servidor lo envía al residente y a la administración,
+    // y compara el RUT declarado con el padrón (el resultado solo lo ve la administración)
     sendComprobante({
-      to_email:ADMIN_EMAIL,
-      asunto:asuntoAdmin,
-      cuerpo:`NUEVO REGISTRO REQUIERE VISADO\n=============================================\n${resumen}\n\n📸 Cédula adjunta para verificación de identidad:\n- Frontal: ${form.carnetFrontal?form.carnetFrontal.name:"No adjuntada"}\n- Trasera: ${form.carnetTrasero?form.carnetTrasero.name:"No adjuntada"}`,
+      datos:{
+        to_email:form.email?.trim()||"",
+        nombre:form.nombre,estac_id:found.id,
+        torre:found.torre,depto:found.depto,
+        rut:form.rut||"",tipo_residente:form.tipoResidente||"",
+        es_edicion:isEditing,
+        cuerpo:cuerpoComprobante,
+      },
       archivos:[form.carnetFrontal,form.carnetTrasero].filter(Boolean),
-    });
+    }).then(ok=>{ if(!ok) showToast("El registro se guardó, pero no se pudo enviar el comprobante por correo"); });
     // Historial
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
       `${form.nombre} · Patentes: ${veh.map(v=>v.patente).join(", ")||"—"} · Uso: ${usoL[form.usoEstacionamiento]||"—"}`
@@ -1135,28 +1088,14 @@ Una vez visado, recibirás un correo de confirmación.`;
                 </div>
                 {form.torre&&form.depto&&BY_TD[`${form.torre}-${form.depto}`]&&(()=>{
                   const prev=BY_TD[`${form.torre}-${form.depto}`],sc0=SC[prev.sector];
-                  const propietarioPadron=PADRON[`${form.torre}-${form.depto}`];
                   return <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:8}}>
                     <div style={{padding:"12px 16px",borderRadius:10,background:sc0.accent+"18",border:`1.5px solid ${sc0.accent}40`,display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:44,height:44,borderRadius:10,background:sc0.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:14,color:sc0.accent}}>#{prev.id}</div>
                       <div><div style={{fontSize:11,color:sc0.spotOcc,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Estacionamiento asignado ✓</div><div style={{fontSize:13,color:"#0f172a",fontWeight:600}}>{SECTOR_NAMES[prev.sector]}</div></div>
                     </div>
-                    {propietarioPadron?
-                      <div style={{padding:"10px 14px",borderRadius:10,background:"#f0fdf4",border:"1.5px solid #bbf7d0",display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:16}}>✅</span>
-                        <div>
-                          <div style={{fontSize:10,fontWeight:700,color:"#166534",textTransform:"uppercase"}}>Unidad registrada en el padrón</div>
-                          <div style={{fontSize:12,color:"#15803d",fontWeight:600}}>{propietarioPadron.nombre}</div>
-                        </div>
-                      </div>:
-                      <div style={{padding:"10px 14px",borderRadius:10,background:"#fff1f2",border:"1.5px solid #fecdd3",display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:16}}>⚠️</span>
-                        <div style={{fontSize:11,color:"#9f1239"}}>Esta unidad no está en el padrón. Contacta a administración.</div>
-                      </div>
-                    }
                   </div>;
                 })()}
-                <button onClick={handleLookup} style={{width:"100%",marginTop:20,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,.35)"}}>Continuar →</button>
+                <button onClick={handleLookup} disabled={verificando} style={{width:"100%",marginTop:20,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,.35)"}}>{verificando?"Verificando padrón…":"Continuar →"}</button>
               </div>
             )}
 
