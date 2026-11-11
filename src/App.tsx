@@ -285,7 +285,7 @@ const consultarPadron = async (torre, depto) => {
   const res=await fetch(GAS_URL+"?"+p.toString());
   const j=await res.json();
   if(!j||j.ok!==true)throw new Error("respuesta inválida");
-  return !!j.enPadron;
+  return {enPadron:!!j.enPadron,documentosOk:j.documentosOk!==false,faltan:Array.isArray(j.faltan)?j.faltan:[]};
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -1066,8 +1066,8 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
     // Verificar en el servidor que la unidad esté en el padrón de copropietarios
     setVerificando(true);setErrors({});
-    let enPadron=false;
-    try{ enPadron=await consultarPadron(form.torre,form.depto); }
+    let enPadron=false,docs={documentosOk:true,faltan:[]};
+    try{ const r=await consultarPadron(form.torre,form.depto); enPadron=r.enPadron; docs=r; }
     catch(e){
       setVerificando(false);
       setErrors({lookup:"No se pudo verificar el padrón de copropietarios. Revisa tu conexión e inténtalo nuevamente."});
@@ -1076,6 +1076,12 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     setVerificando(false);
     if(!enPadron){
       setErrors({lookup:`UNIDAD NO REGISTRADA EN EL PADRÓN DE COPROPIETARIOS\n\nEstimado(a) Copropietario(a),\n\nPara poder registrar su estacionamiento, primero debe completar el registro de copropietarios. Le solicitamos adjuntar la siguiente documentación:\n\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\n\nSi usted arrienda la unidad, además debe adjuntar:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nLa Ley 21.445 (Art. 5°) establece que todo copropietario debe incorporarse al registro de copropietarios.\n\nComplete su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
+      return;
+    }
+    // Además debe tener todos los documentos entregados (planilla "Listado de Documentos")
+    if(!docs.documentosOk){
+      const lista=docs.faltan.length?docs.faltan.map(f=>`• ${f}`).join("\n"):"• Documentación pendiente de revisión";
+      setErrors({lookup:`DOCUMENTACIÓN INCOMPLETA\n\nEstimado(a) Copropietario(a),\n\nSu unidad figura en el registro de copropietarios, pero para registrar el estacionamiento la administración debe haber recibido toda la documentación. Según nuestros registros, falta:\n\n${lista}\n\nRecuerde que se requiere:\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\nSi la unidad está arrendada, además:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nEnvíe los documentos a la administración (com12norte@gmail.com). Una vez recibidos y revisados, podrá registrar su estacionamiento.\n\nComplete o actualice su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
       return;
     }
     setFound(spot);
@@ -1290,9 +1296,9 @@ Una vez visado, recibirás un correo de confirmación.`;
                     </select>
                     {errors.lookup&&(
                       <div style={{marginTop:8,padding:"14px 16px",borderRadius:10,background:"#fff1f2",border:"1.5px solid #fecaca"}}>
-                        {errors.lookup.startsWith("UNIDAD NO REGISTRADA")
+                        {(errors.lookup.startsWith("UNIDAD NO REGISTRADA")||errors.lookup.startsWith("DOCUMENTACIÓN INCOMPLETA"))
                           ? <div>
-                              <div style={{fontWeight:700,color:"#9f1239",fontSize:13,marginBottom:8}}>⚠️ Unidad no registrada en el padrón de copropietarios</div>
+                              <div style={{fontWeight:700,color:"#9f1239",fontSize:13,marginBottom:8}}>⚠️ {errors.lookup.startsWith("DOCUMENTACIÓN")?"Documentación incompleta":"Unidad no registrada en el padrón de copropietarios"}</div>
                               {errors.lookup.split("\n").slice(1).map((line,i)=>{
                                 if(line.includes("https://forms.gle")){
                                   const url=line.match(/https:\/\/\S+/)?.[0]||"";
@@ -1683,7 +1689,13 @@ Una vez visado, recibirás un correo de confirmación.`;
 const loadSolicitudes = async () => {
   try {
     const data = await fsWhere("registros", "usoEstacionamiento", "ceder_largo");
-    return data.map(({_id,...r})=>({id:Number(_id),...r})).sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
+    return data.map(({_id,...r})=>{
+      const id=Number(_id),sp=SPOT_INFO[id]||{};
+      const fecha=r.fechaInicioP||(r.updatedAt?String(r.updatedAt).split("T")[0]:"");
+      return {id,...r,estacId:r.estacId||id,torreCedente:r.torreCedente||TORRES_LABELS[sp.torre]||sp.torre||"—",deptoCedente:r.deptoCedente||sp.depto||"—",
+        torreCedido:TORRES_LABELS[r.torreCedido]||r.torreCedido||"—",deptoCedido:r.deptoCedido||"—",
+        fechaSolicitud:r.fechaSolicitud||(fecha?new Date(fecha+"T12:00:00").toLocaleDateString("es-CL"):"")};
+    }).sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
   } catch(e){console.error("loadSolicitudes:",e);return [];}
 };
 const updateSolicitud = async (id, patch) => {
@@ -1778,6 +1790,15 @@ const AdminsTab = () => {
   );
 };
 
+// Abre en Drive las fotos de cédula guardadas para ese estacionamiento
+// (se ven con la cuenta dueña de la carpeta, com12norte@gmail.com)
+const VerCedula = ({id}) => (
+  <a href={`https://drive.google.com/drive/search?q=${encodeURIComponent(`Estac_${id}_cedula`)}`} target="_blank" rel="noreferrer"
+    style={{display:"inline-block",marginTop:6,padding:"5px 10px",borderRadius:8,border:"1px solid #334155",color:"#93c5fd",fontSize:11,textDecoration:"none"}}>
+    📎 Ver cédula
+  </a>
+);
+
 // ── SOLICITUDES TAB ──
 const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
   const [solis,setSolis] = useState([]);
@@ -1851,8 +1872,9 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
               <div key={id} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1.5px solid #fb923c40",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{id} — {r.nombre||"—"}</div>
-                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Torre {r.torre} · {r.depto} · {r.fechaRegistro||"—"}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Torre {TORRES_LABELS[SPOT_INFO[id]?.torre]||SPOT_INFO[id]?.torre||"—"} · {SPOT_INFO[id]?.depto||"—"} · {r.fechaRegistro||"—"}</div>
                   <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
+                  <VerCedula id={id}/>
                 </div>
                 <button onClick={async()=>{
                   await updateSolicitud(id,{estadoRegistro:"visado",fechaVisado:new Date().toISOString()});
@@ -1889,7 +1911,8 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{s.estacId} — Torre {s.torreCedente} · {s.deptoCedente}</div>
-                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Solicitado: {s.createdAt?.toDate?.()?.toLocaleDateString("es-CL")||s.fechaSolicitud||"—"}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Solicitado: {s.fechaSolicitud||"—"}</div>
+                  <VerCedula id={s.id}/>
                 </div>
                 {estadoBadge(s.estadoPrestamo)}
               </div>
