@@ -219,7 +219,7 @@ const verificarCorreo = async (id, email) => {
 };
 
 // ── EMAILJS ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzxUxh5GAp5o3YJUjkzUgM62dGs43MFMvv9qVH5SdgZK55pvSQvPdA75ZriGP6UkIKrpQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwC1CGjIikpomM_T5pKT5Au65IUxOBjYlKGy9oozIQuKtpWSRl02xLLOZFtcr_grXptpg/exec";
 
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
@@ -247,9 +247,9 @@ const fileToBase64=(file)=>new Promise((res,rej)=>{
 
 // Reduce la foto de la cédula (máx. 1400 px, JPEG) para que el envío sea liviano.
 // Si el navegador no puede procesarla, se envía el archivo original.
-const prepararAdjunto=async(file)=>{
+const prepararAdjunto=async(file,etiqueta="")=>{
   const original=await fileToBase64(file);
-  if(!file.type||!file.type.startsWith("image/"))return{nombre:file.name,tipo:file.type||"application/octet-stream",datos:original};
+  if(!file.type||!file.type.startsWith("image/"))return{nombre:file.name,tipo:file.type||"application/pdf",datos:original,etiqueta};
   try{
     const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=original;});
     const max=1400,esc=Math.min(1,max/Math.max(img.width,img.height));
@@ -258,8 +258,8 @@ const prepararAdjunto=async(file)=>{
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);
     const datos=c.toDataURL("image/jpeg",0.75);
     if(!datos.startsWith("data:image/jpeg"))throw new Error("sin jpeg");
-    return{nombre:file.name.replace(/\.[^.]+$/,"")+".jpg",tipo:"image/jpeg",datos};
-  }catch(e){return{nombre:file.name,tipo:file.type,datos:original};}
+    return{nombre:file.name.replace(/\.[^.]+$/,"")+".jpg",tipo:"image/jpeg",datos,etiqueta};
+  }catch(e){return{nombre:file.name,tipo:file.type,datos:original,etiqueta};}
 };
 
 // Envío del comprobante con la cédula adjunta. Una sola llamada: el servidor (GAS)
@@ -268,7 +268,12 @@ const prepararAdjunto=async(file)=>{
 const sendComprobante = async ({datos={}, archivos=[]}) => {
   try {
     const adjuntos=[];
-    for(const f of archivos){ if(f) adjuntos.push(await prepararAdjunto(f)); }
+    // archivos: File o {file, etiqueta}
+    for(const a of archivos){
+      if(!a)continue;
+      const f=a instanceof File?a:a.file, et=a instanceof File?"":(a.etiqueta||"");
+      if(f) adjuntos.push(await prepararAdjunto(f,et));
+    }
     await fetch(GAS_URL,{
       method:"POST",mode:"no-cors",
       headers:{"Content-Type":"text/plain;charset=utf-8"},
@@ -1208,7 +1213,7 @@ ${resumen}
 
 📸 Documentos adjuntos:
 - Cédula frontal: ${form.carnetFrontal?form.carnetFrontal.name:"No adjuntada"}
-- Cédula trasera: ${form.carnetTrasero?form.carnetTrasero.name:"No adjuntada"}
+- Cédula trasera: ${form.carnetTrasero?form.carnetTrasero.name:"No adjuntada"}${form.usoEstacionamiento==="ceder_largo"?`\n- Autorización de préstamo firmada: ${form.docCedido?form.docCedido.name:"No adjuntada"}`:""}
 
 Este registro debe ser aprobado por la administración.
 Una vez visado, recibirás un correo de confirmación.`;
@@ -1223,7 +1228,11 @@ Una vez visado, recibirás un correo de confirmación.`;
         es_edicion:isEditing,
         cuerpo:cuerpoComprobante,
       },
-      archivos:[form.carnetFrontal,form.carnetTrasero].filter(Boolean),
+      archivos:[
+        form.carnetFrontal&&{file:form.carnetFrontal,etiqueta:"cedula_frontal"},
+        form.carnetTrasero&&{file:form.carnetTrasero,etiqueta:"cedula_trasera"},
+        form.usoEstacionamiento==="ceder_largo"&&form.docCedido&&{file:form.docCedido,etiqueta:"autorizacion_prestamo"},
+      ].filter(Boolean),
     }).then(ok=>{ if(!ok) showToast("El registro se guardó, pero no se pudo enviar el comprobante por correo"); });
     // Historial
     addHistorial(found.id, isEditing?"Modificación":"Registro inicial",
@@ -1819,9 +1828,9 @@ const AdminsTab = () => {
 // Abre en Drive las fotos de cédula guardadas para ese estacionamiento
 // (se ven con la cuenta dueña de la carpeta, com12norte@gmail.com)
 const VerCedula = ({id}) => (
-  <a href={`https://drive.google.com/drive/search?q=${encodeURIComponent(`Estac_${id}_cedula`)}`} target="_blank" rel="noreferrer"
+  <a href={`https://drive.google.com/drive/search?q=${encodeURIComponent(`Estac_${id}_`)}`} target="_blank" rel="noreferrer"
     style={{display:"inline-block",marginTop:6,padding:"5px 10px",borderRadius:8,border:"1px solid #334155",color:"#93c5fd",fontSize:11,textDecoration:"none"}}>
-    📎 Ver cédula
+    📎 Ver documentos (cédula y autorización)
   </a>
 );
 
