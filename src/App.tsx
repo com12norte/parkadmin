@@ -219,7 +219,7 @@ const verificarCorreo = async (id, email) => {
 };
 
 // ── EMAILJS ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw0aYEMmkyMIrKT4fUMcfZlnDhg16OuXnfyUK-cKuyjp02acvOkS0DZc53S-oTQO0ZDKQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzxUxh5GAp5o3YJUjkzUgM62dGs43MFMvv9qVH5SdgZK55pvSQvPdA75ZriGP6UkIKrpQ/exec";
 
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
@@ -285,7 +285,8 @@ const consultarPadron = async (torre, depto) => {
   const res=await fetch(GAS_URL+"?"+p.toString());
   const j=await res.json();
   if(!j||j.ok!==true)throw new Error("respuesta inválida");
-  return {enPadron:!!j.enPadron,documentosOk:j.documentosOk!==false,faltan:Array.isArray(j.faltan)?j.faltan:[]};
+  return {enPadron:!!j.enPadron,documentosOk:j.documentosOk!==false,faltan:Array.isArray(j.faltan)?j.faltan:[],
+    siArrienda:Array.isArray(j.siArrienda)?j.siArrienda:[],sinFicha:!!j.sinFicha};
 };
 const SPOTS_DATA = [
   {id:59,torre:"1060",depto:"A1",sector:1,gx:1,gy:0},{id:39,torre:"1036",depto:"A1",sector:1,gx:1,gy:1},
@@ -1066,7 +1067,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
     // Verificar en el servidor que la unidad esté en el padrón de copropietarios
     setVerificando(true);setErrors({});
-    let enPadron=false,docs={documentosOk:true,faltan:[]};
+    let enPadron=false,docs={documentosOk:true,faltan:[],siArrienda:[],sinFicha:false};
     try{ const r=await consultarPadron(form.torre,form.depto); enPadron=r.enPadron; docs=r; }
     catch(e){
       setVerificando(false);
@@ -1080,8 +1081,23 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     }
     // Además debe tener todos los documentos entregados (planilla "Listado de Documentos")
     if(!docs.documentosOk){
-      const lista=docs.faltan.length?docs.faltan.map(f=>`• ${f}`).join("\n"):"• Documentación pendiente de revisión";
-      setErrors({lookup:`DOCUMENTACIÓN INCOMPLETA\n\nEstimado(a) Copropietario(a),\n\nSu unidad figura en el registro de copropietarios, pero para registrar el estacionamiento la administración debe haber recibido toda la documentación. Según nuestros registros, falta:\n\n${lista}\n\nRecuerde que se requiere:\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\nSi la unidad está arrendada, además:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nEnvíe los documentos a la administración (com12norte@gmail.com). Una vez recibidos y revisados, podrá registrar su estacionamiento.\n\nComplete o actualice su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
+      // Descripción de cada documento tal como se le pide al copropietario
+      const DESC={
+        "Certificado de Dominio Vigente":"Certificado de dominio vigente de la unidad (Conservador de Bienes Raíces)",
+        "CI Dueño":"Copia de la cédula de identidad del o los propietarios (por ambos lados)",
+        "Contrato de Arriendo":"Copia simple del contrato de arrendamiento vigente, o declaración del propietario (arrendador)",
+        "CI Arrendatario":"Copia de la cédula de identidad del arrendatario (por ambos lados)",
+        "Ficha de Registro":"Formulario de registro de copropietarios completo: https://forms.gle/aiEgAzLoVhqSoNNg8",
+      };
+      const linea=f=>`• ${DESC[f]||f}`;
+      const partes=[];
+      if(docs.faltan.length) partes.push(`Documentos pendientes:\n${docs.faltan.map(linea).join("\n")}`);
+      if(docs.siArrienda.length) partes.push(`Si la unidad está arrendada, además:\n${docs.siArrienda.map(linea).join("\n")}`);
+      if(!partes.length) partes.push("La administración aún está revisando su documentación.");
+      const intro=docs.sinFicha
+        ?"Su unidad aún no tiene documentación registrada en la administración."
+        :"Para registrar el estacionamiento, la administración debe haber recibido toda la documentación de su unidad. Según nuestros registros:";
+      setErrors({lookup:`DOCUMENTACIÓN INCOMPLETA\n\nEstimado(a) Copropietario(a) de ${TORRES_LABELS[form.torre]||form.torre}, depto. ${form.depto}:\n\n${intro}\n\n${partes.join("\n\n")}\n\nEnvíe los documentos a com12norte@gmail.com indicando su dirección y departamento. Una vez recibidos y revisados, podrá registrar su estacionamiento (puede tardar unos días).\n\nLa Ley 21.445 (Art. 5°) establece que todo copropietario debe incorporarse al registro de copropietarios.\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
       return;
     }
     setFound(spot);
@@ -1300,16 +1316,26 @@ Una vez visado, recibirás un correo de confirmación.`;
                           ? <div>
                               <div style={{fontWeight:700,color:"#9f1239",fontSize:13,marginBottom:8}}>⚠️ {errors.lookup.startsWith("DOCUMENTACIÓN")?"Documentación incompleta":"Unidad no registrada en el padrón de copropietarios"}</div>
                               {errors.lookup.split("\n").slice(1).map((line,i)=>{
+                                if(!line.trim())return null;
+                                const titulo=/^(Documentos pendientes|Si la unidad está arrendada|Si usted arrienda)/.test(line);
+                                const vineta=line.trim().startsWith("•");
+                                const estilo={margin:titulo?"10px 0 4px":"4px 0",fontSize:12,color:titulo?"#9f1239":"#374151",fontWeight:titulo?700:400,paddingLeft:vineta?8:0};
                                 if(line.includes("https://forms.gle")){
                                   const url=line.match(/https:\/\/\S+/)?.[0]||"";
-                                  return <p key={i} style={{margin:"6px 0",fontSize:12,color:"#1e293b"}}>
+                                  const texto=line.replace(url,"").replace(/[:\s]+$/,"");
+                                  return <p key={i} style={estilo}>
+                                    {texto&&!/^Complete su registro/.test(texto)?<>{texto}: </>:null}
                                     <a href={url} target="_blank" rel="noreferrer"
                                        style={{color:"#0F2557",fontWeight:700,textDecoration:"underline"}}>
-                                      📝 Completar registro de copropietarios aquí
+                                      📝 {texto&&!/^Complete su registro/.test(texto)?"abrir formulario":"Completar registro de copropietarios aquí"}
                                     </a>
                                   </p>;
                                 }
-                                return line.trim()?<p key={i} style={{margin:"4px 0",fontSize:12,color:"#374151"}}>{line}</p>:null;
+                                if(line.includes("com12norte@gmail.com")){
+                                  const [antes,despues]=line.split("com12norte@gmail.com");
+                                  return <p key={i} style={estilo}>{antes}<a href="mailto:com12norte@gmail.com" style={{color:"#0F2557",fontWeight:700}}>com12norte@gmail.com</a>{despues}</p>;
+                                }
+                                return <p key={i} style={estilo}>{line}</p>;
                               })}
                             </div>
                           : <span style={{fontSize:12,color:"#e53e3e"}}>{errors.lookup}</span>
