@@ -1,24 +1,97 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-// ── SUPABASE ──
-const SUPABASE_URL = "https://qpuuggfcubsepcjwocxf.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdXVnZ2ZjdWJzZXBjandvY3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzk3ODQsImV4cCI6MjA5OTE1NTc4NH0.bTPWVT76QdNKvg9TuvMAX3TrRmfWgvKjuE1VcQWKYaM";
+// ── FIREBASE (Firestore + Auth vía REST) ──
+// Proyecto "parkadmin-a38a0" de la cuenta com12norte@gmail.com
+const FB_API_KEY = "AIzaSyDwKf88v3syQn-BYlq8REkUZblkOvEHR80";
+const FB_PROJECT = "parkadmin-a38a0";
+const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 
-const sbFetch = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-  headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation",...(opts.headers||{})},
-  ...opts,
-});
+// Conversión entre objetos JS y el formato tipado de Firestore
+const toFs = (v) => {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (v instanceof Date) return { timestampValue: v.toISOString() };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (typeof v === "string") return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(toFs) } };
+  if (typeof v === "object") return { mapValue: { fields: Object.fromEntries(Object.entries(v).filter(([,x])=>x!==undefined).map(([k, x]) => [k, toFs(x)])) } };
+  return { stringValue: String(v) };
+};
+const fromFs = (v) => {
+  if (!v) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return Number(v.integerValue);
+  if ("doubleValue" in v) return v.doubleValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("nullValue" in v) return null;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(fromFs);
+  if ("mapValue" in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fromFs(x)]));
+  if ("geoPointValue" in v) return v.geoPointValue;
+  if ("referenceValue" in v) return v.referenceValue;
+  return null;
+};
+const docToObj = (d) => ({ _id: d.name.split("/").pop(), ...Object.fromEntries(Object.entries(d.fields || {}).map(([k, x]) => [k, fromFs(x)])) });
+const fsCheck = async (res) => { if (!res.ok) throw new Error(`Firestore ${res.status}: ${(await res.text()).slice(0,200)}`); return res; };
+
+// Lista una colección completa (pagina de a 300)
+const fsList = async (col) => {
+  const out = []; let token = "";
+  do {
+    const res = await fsCheck(await fetch(`${FS_BASE}/${col}?pageSize=300&key=${FB_API_KEY}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`));
+    const j = await res.json();
+    (j.documents || []).forEach(d => out.push(docToObj(d)));
+    token = j.nextPageToken || "";
+  } while (token);
+  return out;
+};
+// Crea o reemplaza un documento completo
+const fsSet = async (col, id, obj) => {
+  const { _id, ...data } = obj;
+  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: toFs(data).mapValue.fields }),
+  }));
+};
+// Actualiza solo los campos indicados
+const fsUpdate = async (col, id, patch) => {
+  const mask = Object.keys(patch).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
+  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?${mask}&key=${FB_API_KEY}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: toFs(patch).mapValue.fields }),
+  }));
+};
+// Agrega un documento con id automático
+const fsAdd = async (col, obj) => {
+  await fsCheck(await fetch(`${FS_BASE}/${col}?key=${FB_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: toFs(obj).mapValue.fields }),
+  }));
+};
+const fsDelete = async (col, id) => {
+  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, { method: "DELETE" }));
+};
+// Consulta por igualdad de un campo
+const fsWhere = async (col, field, value) => {
+  const res = await fsCheck(await fetch(`${FS_BASE}:runQuery?key=${FB_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: col }], where: { fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: toFs(value) } } } }),
+  }));
+  const j = await res.json();
+  return (Array.isArray(j) ? j : []).filter(r => r.document).map(r => docToObj(r.document));
+};
+
 const loadRegistros = async () => {
-  try { const res=await sbFetch("registros?select=*"); const data=await res.json(); const r={}; (Array.isArray(data)?data:[]).forEach(x=>{r[x.id]=x;}); return r; }
-  catch(e){ return {}; }
+  try { const data = await fsList("registros"); const r = {}; data.forEach(x => { const id = Number(x._id); const { _id, ...rest } = x; r[id] = rest; }); return r; }
+  catch(e){ console.error("loadRegistros:", e); return {}; }
 };
 const upsertRegistro = async (id,record) => {
-  try { await sbFetch("registros",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify({id,...record})}); }
-  catch(e){}
+  try { await fsSet("registros", String(id), record); }
+  catch(e){ console.error("upsertRegistro:", e); }
 };
 const deleteRegistro = async (id) => {
-  try { await sbFetch(`registros?id=eq.${id}`,{method:"DELETE"}); }
-  catch(e){}
+  try { await fsDelete("registros", String(id)); }
+  catch(e){ console.error("deleteRegistro:", e); }
 };
 
 // ── EMAILJS ──
@@ -319,19 +392,16 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
 // ── HISTORIAL ──
 const loadHistorial = async (spotId) => {
   try {
-    const res = await sbFetch(`historial?spotId=eq.${spotId}&order=created_at.desc&limit=20`);
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch(e) { return []; }
+    const data = await fsWhere("historial", "spot_id", Number(spotId));
+    return data
+      .map(h => ({ ...h, created_at: h.createdAt || h.created_at }))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 20);
+  } catch(e) { console.error("loadHistorial:", e); return []; }
 };
 const addHistorial = async (spotId, accion, detalle) => {
-  try {
-    await sbFetch("historial", {
-      method:"POST",
-      headers:{"Prefer":"return=minimal"},
-      body:JSON.stringify({spotId, accion, detalle, created_at:new Date().toISOString()})
-    });
-  } catch(e) { /* silencioso */ }
+  try { await fsAdd("historial", { spot_id: Number(spotId), accion, detalle, createdAt: new Date() }); }
+  catch(e) { console.error("addHistorial:", e); }
 };
 
 // ── RECLAMO MODAL ──
@@ -403,9 +473,8 @@ const ReclamosTab = () => {
   const [reclamos, setReclamos] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(()=>{
-    sbFetch("reclamos?order=created_at.desc&limit=50")
-      .then(r=>r.json())
-      .then(d=>{ setReclamos(Array.isArray(d)?d:[]); setLoading(false); })
+    fsList("reclamos")
+      .then(d=>{ setReclamos(d.map(r=>({...r,created_at:r.createdAt||r.created_at})).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,50)); setLoading(false); })
       .catch(()=>setLoading(false));
   },[]);
   if(loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando reclamos...</div>;
@@ -601,14 +670,20 @@ const StaffLogin = ({onSuccess,onBack}) => {
     if(!email.trim()||!pass.trim()){setError("Completa todos los campos.");return;}
     loginInProgress=true; setLoading(true); setError("");
     try{
-      const res=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{
+      const res=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FB_API_KEY}`,{
         method:"POST",
-        headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`},
-        body:JSON.stringify({email:email.trim(),password:pass}),
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:email.trim(),password:pass,returnSecureToken:true}),
       });
       const data=await res.json();
-      if(data.access_token){loginInProgress=false;onSuccess();}
-      else{setError(data.error_description||data.msg||"Correo o contraseña incorrectos.");loginInProgress=false;setLoading(false);}
+      if(data.idToken){loginInProgress=false;onSuccess();}
+      else{
+        const code=data.error?.message||"";
+        const msg=/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND/.test(code)?"Correo o contraseña incorrectos."
+          :/TOO_MANY_ATTEMPTS/.test(code)?"Demasiados intentos. Espera unos minutos."
+          :/USER_DISABLED/.test(code)?"Esta cuenta está deshabilitada.":"No se pudo ingresar. Inténtalo nuevamente.";
+        setError(msg);loginInProgress=false;setLoading(false);
+      }
     }catch(e){setError("Error de conexión.");loginInProgress=false;setLoading(false);}
   };
 
@@ -1453,22 +1528,16 @@ Una vez visado, recibirás un correo de confirmación.`;
   );
 };
 
-// ── SUPABASE SOLICITUDES (préstamos ceder_largo) ──
+// ── SOLICITUDES (préstamos ceder_largo) ──
 const loadSolicitudes = async () => {
   try {
-    const res = await sbFetch("registros?usoEstacionamiento=eq.ceder_largo&select=*");
-    const data = await res.json();
-    return Array.isArray(data) ? data.sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0)) : [];
+    const data = await fsWhere("registros", "usoEstacionamiento", "ceder_largo");
+    return data.map(({_id,...r})=>({id:Number(_id),...r})).sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
   } catch(e){console.error("loadSolicitudes:",e);return [];}
 };
 const updateSolicitud = async (id, patch) => {
-  try {
-    await sbFetch(`registros?id=eq.${id}`, {
-      method:"PATCH",
-      headers:{"Prefer":"return=representation"},
-      body:JSON.stringify(patch)
-    });
-  } catch(e){console.error("updateSolicitud:",e);}
+  try { await fsUpdate("registros", String(id), patch); }
+  catch(e){console.error("updateSolicitud:",e);}
 };
 
 // ── SOLICITUDES TAB ──
@@ -1537,7 +1606,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
                   <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
                 </div>
                 <button onClick={async()=>{
-                  await sbFetch(`registros?id=eq.${id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado",fechaVisado:new Date().toISOString()})});
+                  await updateSolicitud(id,{estadoRegistro:"visado",fechaVisado:new Date().toISOString()});
                   setRecords(prev=>({...prev,[id]:{...prev[id],estadoRegistro:"visado",fechaVisado:new Date().toISOString()}}));
                   // Email de confirmación al residente
                   if(r.email) sendEmail({
@@ -1861,7 +1930,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                   <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{fechaReg}</span>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                     {esPendiente&&<button onClick={async()=>{
-                      await sbFetch(`registros?id=eq.${s.id}`,{method:"PATCH",headers:{"Prefer":"return=representation"},body:JSON.stringify({estadoRegistro:"visado"})});
+                      await updateSolicitud(s.id,{estadoRegistro:"visado"});
                       setRecords(r=>({...r,[s.id]:{...r[s.id],estadoRegistro:"visado"}}));
                     }} style={{padding:"4px 7px",borderRadius:6,border:"1.5px solid #166534",background:"rgba(22,163,74,.15)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:700}} title="Visar registro">✅</button>}
                     <button onClick={()=>setSelectedSpot(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #1e3a5f",background:"rgba(37,99,235,.12)",color:"#60a5fa",cursor:"pointer",fontSize:13}}>✏️</button>
