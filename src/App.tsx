@@ -1187,7 +1187,15 @@ RUT declarado: ${form.rut||"—"}
 Tipo residente: ${form.tipoResidente||"—"}
 Teléfono: ${form.telefono||"—"}
 Uso: ${usoL[form.usoEstacionamiento]||form.usoEstacionamiento}
-Patentes: ${veh.map(v=>v.patente).join(", ")||"—"}
+Patentes: ${veh.map(v=>v.patente).join(", ")||"—"}${form.usoEstacionamiento==="ceder_largo"?`
+
+PRÉSTAMO DEL ESTACIONAMIENTO
+Se presta a: ${form.nombreCedido||"—"}
+RUT beneficiario: ${form.rutCedido||"—"}
+Unidad beneficiario: ${TORRES_LABELS[form.torreCedido]||form.torreCedido||"—"} · Depto: ${form.deptoCedido||"—"}
+Correo beneficiario: ${form.emailCedido||"—"}
+Teléfono beneficiario: ${form.telefonoCedido||"—"}
+Estado del préstamo: Pendiente de aprobación por administración`:""}
 Fecha registro: ${fechaStr}
 Estado: Pendiente de visado por administración`;
     const emailParams={
