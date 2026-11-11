@@ -6,6 +6,71 @@ const FB_API_KEY = "AIzaSyDwKf88v3syQn-BYlq8REkUZblkOvEHR80";
 const FB_PROJECT = "parkadmin-a38a0";
 const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 
+// ── Sesión de administración ──
+// Administradores principales: fijos, no se pueden quitar desde la app.
+// Los demás se guardan en la colección "admins" (id = correo) y se agregan desde la pestaña Administradores.
+const ADMIN_EMAILS = ["paco.g.u@gmail.com", "com12norte@gmail.com"];
+let fbSession = null; // {idToken, refreshToken, exp, email, admin}
+const esAdmin = () => !!fbSession && fbSession.admin === true;
+const cerrarSesion = () => { fbSession = null; };
+const getIdToken = async () => {
+  if (!fbSession) return null;
+  if (Date.now() < fbSession.exp - 60000) return fbSession.idToken;
+  try {
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_API_KEY}`, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(fbSession.refreshToken)}`,
+    });
+    const j = await r.json();
+    if (!j.id_token) { fbSession = null; return null; }
+    fbSession = { ...fbSession, idToken: j.id_token, refreshToken: j.refresh_token, exp: Date.now() + Number(j.expires_in) * 1000 };
+    return fbSession.idToken;
+  } catch (e) { return fbSession?.idToken || null; }
+};
+const fsHeaders = async (extra = {}) => { const t = await getIdToken(); return { ...extra, ...(t ? { Authorization: `Bearer ${t}` } : {}) }; };
+
+// ── Cuentas (Firebase Authentication) ──
+const authCall = async (metodo, body) => {
+  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${metodo}?key=${FB_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  return r.json();
+};
+// Envía el correo de Firebase para crear o restablecer la contraseña
+const enviarRecuperacion = async (email) => {
+  const j = await authCall("sendOobCode", { requestType: "PASSWORD_RESET", email: String(email).trim() });
+  if (j.error) throw new Error(j.error.message || "error");
+  return true;
+};
+const passwordAleatoria = () => {
+  const a = new Uint8Array(24); crypto.getRandomValues(a);
+  return Array.from(a, x => x.toString(36).padStart(2, "0")).join("") + "Aa1!";
+};
+
+// Huella del correo (SHA-256). Permite verificar al residente sin dejar su correo a la vista.
+const hashEmail = async (e) => {
+  const t = String(e || "").trim().toLowerCase();
+  if (!t) return "";
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+};
+// Nombre abreviado para mostrar al público: "Mariana D."
+const nombreCorto = (n) => {
+  const p = String(n || "").trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return "";
+  return p.length > 1 ? `${p[0]} ${p[1][0].toUpperCase()}.` : p[0];
+};
+// Versión pública de un registro: sin correo, teléfono, RUT ni datos del propietario
+const proyeccionPublica = (rec) => ({
+  patentes: rec.patentes || [],
+  vehiculos: (rec.vehiculos || []).map(v => ({ patente: v.patente || "", marca: v.marca || "", color: v.color || "", esVisita: v.esVisita || "no", nombreVisita: v.nombreVisita || "" })),
+  usoEstacionamiento: rec.usoEstacionamiento || "",
+  estadoRegistro: rec.estadoRegistro || "pendiente",
+  nombre: nombreCorto(rec.nombre),
+  tieneEmail: !!String(rec.email || "").trim(),
+  updatedAt: rec.updatedAt || "",
+});
+
 // Conversión entre objetos JS y el formato tipado de Firestore
 const toFs = (v) => {
   if (v === null || v === undefined) return { nullValue: null };
@@ -38,7 +103,7 @@ const fsCheck = async (res) => { if (!res.ok) throw new Error(`Firestore ${res.s
 const fsList = async (col) => {
   const out = []; let token = "";
   do {
-    const res = await fsCheck(await fetch(`${FS_BASE}/${col}?pageSize=300&key=${FB_API_KEY}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`));
+    const res = await fsCheck(await fetch(`${FS_BASE}/${col}?pageSize=300&key=${FB_API_KEY}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`, { headers: await fsHeaders() }));
     const j = await res.json();
     (j.documents || []).forEach(d => out.push(docToObj(d)));
     token = j.nextPageToken || "";
@@ -49,7 +114,7 @@ const fsList = async (col) => {
 const fsSet = async (col, id, obj) => {
   const { _id, ...data } = obj;
   await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" },
+    method: "PATCH", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(data).mapValue.fields }),
   }));
 };
@@ -57,41 +122,100 @@ const fsSet = async (col, id, obj) => {
 const fsUpdate = async (col, id, patch) => {
   const mask = Object.keys(patch).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
   await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?${mask}&key=${FB_API_KEY}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" },
+    method: "PATCH", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(patch).mapValue.fields }),
   }));
 };
 // Agrega un documento con id automático
 const fsAdd = async (col, obj) => {
   await fsCheck(await fetch(`${FS_BASE}/${col}?key=${FB_API_KEY}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(obj).mapValue.fields }),
   }));
 };
 const fsDelete = async (col, id) => {
-  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, { method: "DELETE" }));
+  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, { method: "DELETE", headers: await fsHeaders() }));
 };
 // Consulta por igualdad de un campo
 const fsWhere = async (col, field, value) => {
   const res = await fsCheck(await fetch(`${FS_BASE}:runQuery?key=${FB_API_KEY}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ structuredQuery: { from: [{ collectionId: col }], where: { fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: toFs(value) } } } }),
   }));
   const j = await res.json();
   return (Array.isArray(j) ? j : []).filter(r => r.document).map(r => docToObj(r.document));
 };
 
+// Público: solo la versión sin datos personales
+const loadOcupacion = async () => {
+  try { const data = await fsList("ocupacion"); const r = {}; data.forEach(x => { const { _id, ...rest } = x; r[Number(_id)] = rest; }); return r; }
+  catch(e){ console.error("loadOcupacion:", e); return {}; }
+};
+// Administración: registros completos (requiere sesión)
 const loadRegistros = async () => {
   try { const data = await fsList("registros"); const r = {}; data.forEach(x => { const id = Number(x._id); const { _id, ...rest } = x; r[id] = rest; }); return r; }
   catch(e){ console.error("loadRegistros:", e); return {}; }
 };
+// Al ingresar la administración: completa la huella de correo que falte y
+// regenera la versión pública de cada registro.
+const sincronizarPublico = async (regs) => {
+  for (const [id, rec] of Object.entries(regs)) {
+    try {
+      if (rec.emailHash === undefined) { const h = await hashEmail(rec.email); await fsUpdate("registros", id, { emailHash: h }); rec.emailHash = h; }
+      await fsSet("ocupacion", id, proyeccionPublica(rec));
+    } catch (e) { console.error("sincronizarPublico", id, e); }
+  }
+};
 const upsertRegistro = async (id,record) => {
-  try { await fsSet("registros", String(id), record); }
-  catch(e){ console.error("upsertRegistro:", e); }
+  try {
+    const { emailHash: _h, ...rec } = record;
+    const datos = { ...rec, emailHash: await hashEmail(rec.email), updatedAt: rec.updatedAt || new Date().toISOString() };
+    // Un cambio hecho por el residente siempre vuelve a quedar pendiente de visado
+    if (!esAdmin()) {
+      datos.estadoRegistro = "pendiente";
+      if (datos.usoEstacionamiento === "ceder_largo") datos.estadoPrestamo = "pendiente"; else delete datos.estadoPrestamo;
+      delete datos.fechaVisado; delete datos.aprobadoAt; delete datos.rechazadoAt; delete datos.motivoRechazo;
+    }
+    await fsSet("registros", String(id), datos);
+    await fsSet("ocupacion", String(id), proyeccionPublica(datos));
+    return true;
+  }
+  catch(e){ console.error("upsertRegistro:", e); return false; }
 };
 const deleteRegistro = async (id) => {
-  try { await fsDelete("registros", String(id)); }
+  try { await fsDelete("registros", String(id)); await fsDelete("ocupacion", String(id)); }
   catch(e){ console.error("deleteRegistro:", e); }
+};
+// El residente demuestra que es el dueño del registro con su correo:
+// las reglas solo aceptan esta escritura si la huella coincide con la guardada.
+// ── Administradores ──
+const normEmail = (e) => String(e || "").trim().toLowerCase();
+const loadAdmins = async () => {
+  try { return (await fsList("admins")).map(({ _id, ...a }) => ({ email: _id, ...a })); }
+  catch (e) { console.error("loadAdmins:", e); return []; }
+};
+const verificarAdmin = async (email) => {
+  const e = normEmail(email);
+  if (ADMIN_EMAILS.includes(e)) return true;
+  try {
+    const r = await fetch(`${FS_BASE}/admins/${encodeURIComponent(e)}?key=${FB_API_KEY}`, { headers: await fsHeaders() });
+    return r.ok;
+  } catch (x) { return false; }
+};
+// Crea la cuenta (si no existe) con una clave aleatoria que nadie conoce,
+// la registra como administrador y envía el correo para que defina su contraseña.
+const agregarAdmin = async (email, nombre) => {
+  const e = normEmail(email);
+  const alta = await authCall("signUp", { email: e, password: passwordAleatoria(), returnSecureToken: false });
+  if (alta.error && alta.error.message !== "EMAIL_EXISTS") throw new Error(alta.error.message);
+  await fsSet("admins", e, { nombre: String(nombre || "").trim(), agregadoPor: fbSession?.email || "", agregadoAt: new Date() });
+  await enviarRecuperacion(e);
+};
+const quitarAdmin = async (email) => { await fsDelete("admins", normEmail(email)); };
+
+const verificarCorreo = async (id, email) => {
+  try { await fsSet("verificaciones", String(id), { emailHash: await hashEmail(email), at: new Date() }); return true; }
+  catch(e){ return false; }
 };
 
 // ── EMAILJS ──
@@ -663,7 +787,18 @@ const StaffLogin = ({onSuccess,onBack}) => {
   const [pass,setPass]=useState("");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
+  const [aviso,setAviso]=useState("");
+  const [enviando,setEnviando]=useState(false);
   useEffect(()=>{loginInProgress=false;},[]);
+
+  const recuperar=async()=>{
+    if(enviando)return;
+    if(!email.trim()||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())){setError("Escribe tu correo arriba y vuelve a presionar «¿Olvidaste tu contraseña?».");setAviso("");return;}
+    setEnviando(true);setError("");setAviso("");
+    try{await enviarRecuperacion(email);}catch(e){/* no se revela si la cuenta existe */}
+    setEnviando(false);
+    setAviso(`Si ${email.trim()} tiene una cuenta, recibirás un correo para crear una nueva contraseña. Revisa también la carpeta de spam.`);
+  };
 
   const login=async()=>{
     if(loginInProgress)return;
@@ -676,7 +811,13 @@ const StaffLogin = ({onSuccess,onBack}) => {
         body:JSON.stringify({email:email.trim(),password:pass,returnSecureToken:true}),
       });
       const data=await res.json();
-      if(data.idToken){loginInProgress=false;onSuccess();}
+      if(data.idToken){
+        fbSession={idToken:data.idToken,refreshToken:data.refreshToken,exp:Date.now()+Number(data.expiresIn||3600)*1000,email:data.email,admin:false};
+        const ok=await verificarAdmin(data.email);
+        if(!ok){cerrarSesion();setError("Esta cuenta no tiene permisos de administración.");loginInProgress=false;setLoading(false);return;}
+        fbSession.admin=true;
+        loginInProgress=false;onSuccess();
+      }
       else{
         const code=data.error?.message||"";
         const msg=/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND/.test(code)?"Correo o contraseña incorrectos."
@@ -709,9 +850,14 @@ const StaffLogin = ({onSuccess,onBack}) => {
                 style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
+            {aviso&&<div style={{padding:"10px 14px",borderRadius:8,background:"#052e16",border:"1px solid #166534",fontSize:12,color:"#86efac"}}>✉️ {aviso}</div>}
             <button onClick={login} disabled={loading}
               style={{padding:"13px",borderRadius:10,border:"none",background:loading?"#374151":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:loading?"not-allowed":"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               {loading?<><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
+            </button>
+            <button onClick={recuperar} disabled={enviando}
+              style={{background:"none",border:"none",color:"#60a5fa",fontSize:12,cursor:"pointer",padding:4,textDecoration:"underline"}}>
+              {enviando?"Enviando…":"¿Olvidaste tu contraseña?"}
             </button>
           </div>
         </div>
@@ -862,7 +1008,7 @@ const QueryTab = ({records}) => {
               <RowItem icon="🏢" label="Torre" value={spot.torre}/>
               <RowItem icon="🏠" label="Departamento" value={spot.depto}/>
               <RowItem icon="👤" label="Propietario inmueble" value={record.nombre||"—"}/>
-              <RowItem icon="📞" label="Teléfono propietario" value={record.telefono||"—"}/>
+              {record.telefono&&<RowItem icon="📞" label="Teléfono propietario" value={record.telefono}/>}
               {esVisita&&<>
                 <div style={{height:1,background:"rgba(255,255,255,.1)"}}/>
                 <div style={{fontSize:10,color:sc5.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Datos de la visita</div>
@@ -934,18 +1080,23 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     }
     setFound(spot);
     const rec=records[spot.id];
-    if(rec&&rec.email){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
+    if(rec&&(rec.tieneEmail||rec.email)){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
     else{setIsEditing(false);setErrors({});setStep(1);}
   };
 
-  const handleEmailVerify=()=>{
-    if(!found)return;
-    const rec=records[found.id];
-    const stored=(rec?.email||"").trim().toLowerCase();
+  const [verificandoCorreo,setVerificandoCorreo]=useState(false);
+  const handleEmailVerify=async()=>{
+    if(!found||verificandoCorreo)return;
+    const rec=records[found.id]||{};
     const entered=emailInput.trim().toLowerCase();
     if(!entered){setErrors({emailVerify:"Ingresa tu correo"});return;}
-    if(stored!==entered){setErrors({emailVerify:"El correo no coincide. Contacta a administración."});return;}
-    setFormState(f=>({...f,nombre:rec?.nombre||"",email:rec?.email||"",telefono:rec?.telefono||"",tipoResidente:rec?.tipoResidente||"",usoEstacionamiento:rec?.usoEstacionamiento||"",vehiculos:rec?.vehiculos?.length?rec.vehiculos:[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
+    setVerificandoCorreo(true);
+    const ok=await verificarCorreo(found.id,entered);
+    setVerificandoCorreo(false);
+    if(!ok){setErrors({emailVerify:"El correo no coincide. Contacta a administración."});return;}
+    // Por privacidad solo se precargan patentes y uso; los datos personales se ingresan de nuevo
+    setFormState(f=>({...f,nombre:"",email:entered,telefono:"",tipoResidente:"",usoEstacionamiento:rec?.usoEstacionamiento||"",
+      vehiculos:rec?.vehiculos?.length?rec.vehiculos.map(v=>({patente:v.patente||"",marca:v.marca||"",color:v.color||"",esVisita:v.esVisita||"no",nombreVisita:v.nombreVisita||"",telefonoVisita:""})):[{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));
     setErrors({});setStep(1);
   };
 
@@ -1199,7 +1350,7 @@ Una vez visado, recibirás un correo de confirmación.`;
                   <input type="email" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setErrors(er=>({...er,emailVerify:""}));}} placeholder="correo@ejemplo.com"
                     style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${errors.emailVerify?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#f8fafc"}}/>
                   {errors.emailVerify&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:8,background:"#fff5f5",border:"1px solid #fecaca",fontSize:12,color:"#dc2626"}}>⚠️ {errors.emailVerify}</div>}
-                  <button onClick={handleEmailVerify} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar y Editar →</button>
+                  <button onClick={handleEmailVerify} disabled={verificandoCorreo} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>{verificandoCorreo?"Verificando…":"Verificar y Editar →"}</button>
                   <button onClick={()=>{setStep(0);setFound(null);setIsEditing(false);}} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Volver</button>
                 </div>
               </div>;
@@ -1536,8 +1687,95 @@ const loadSolicitudes = async () => {
   } catch(e){console.error("loadSolicitudes:",e);return [];}
 };
 const updateSolicitud = async (id, patch) => {
-  try { await fsUpdate("registros", String(id), patch); }
-  catch(e){console.error("updateSolicitud:",e);}
+  try {
+    await fsUpdate("registros", String(id), patch);
+    if (patch.estadoRegistro) await fsUpdate("ocupacion", String(id), { estadoRegistro: patch.estadoRegistro });
+    return true;
+  }
+  catch(e){console.error("updateSolicitud:",e); return false;}
+};
+
+// ── ADMINISTRADORES TAB ──
+const AdminsTab = () => {
+  const [admins,setAdmins]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [email,setEmail]=useState("");
+  const [nombre,setNombre]=useState("");
+  const [msg,setMsg]=useState(null);
+  const [ocupado,setOcupado]=useState(false);
+  const yo=normEmail(fbSession?.email);
+  const cargar=()=>loadAdmins().then(a=>{setAdmins(a);setLoading(false);});
+  useEffect(()=>{cargar();},[]);
+
+  const agregar=async()=>{
+    const e=normEmail(email);
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){setMsg({t:"err",m:"Ingresa un correo válido."});return;}
+    if(ADMIN_EMAILS.includes(e)||admins.some(a=>a.email===e)){setMsg({t:"err",m:"Ese correo ya es administrador."});return;}
+    setOcupado(true);setMsg(null);
+    try{
+      await agregarAdmin(e,nombre);
+      setMsg({t:"ok",m:`Listo. Se envió un correo a ${e} para que cree su contraseña. Después podrá ingresar en «Acceso Personal».`});
+      setEmail("");setNombre("");cargar();
+    }catch(x){
+      const c=String(x.message||"");
+      setMsg({t:"err",m:/TOO_MANY/.test(c)?"Demasiados intentos. Espera unos minutos.":/INVALID_EMAIL/.test(c)?"El correo no es válido.":`No se pudo agregar (${c}).`});
+    }
+    setOcupado(false);
+  };
+  const quitar=async(e)=>{
+    if(!window.confirm(`¿Quitar a ${e} como administrador? Ya no podrá ver datos ni aprobar.`))return;
+    setOcupado(true);
+    try{await quitarAdmin(e);setMsg({t:"ok",m:`${e} ya no es administrador.`});cargar();}
+    catch(x){setMsg({t:"err",m:"No se pudo quitar. Inténtalo de nuevo."});}
+    setOcupado(false);
+  };
+  const reenviar=async(e)=>{
+    try{await enviarRecuperacion(e);setMsg({t:"ok",m:`Se reenvió el correo de contraseña a ${e}.`});}
+    catch(x){setMsg({t:"err",m:"No se pudo enviar el correo."});}
+  };
+
+  const fila=(e,sub,fijo)=>(
+    <div key={e} style={{background:"#0f172a",borderRadius:12,padding:"12px 14px",marginBottom:8,border:"1px solid #1f2937",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:700,color:"white",wordBreak:"break-all"}}>{e}{e===yo&&<span style={{color:"#60a5fa",fontWeight:600}}> (tú)</span>}</div>
+        <div style={{fontSize:10,color:"#64748b"}}>{sub}</div>
+      </div>
+      <div style={{display:"flex",gap:6,flexShrink:0}}>
+        <button onClick={()=>reenviar(e)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✉️ Contraseña</button>
+        {!fijo&&e!==yo&&<button onClick={()=>quitar(e)} disabled={ocupado} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #7f1d1d",background:"transparent",color:"#fca5a5",fontSize:11,cursor:"pointer"}}>Quitar</button>}
+      </div>
+    </div>
+  );
+
+  const inp={width:"100%",padding:"11px 12px",borderRadius:9,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  return (
+    <div>
+      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>👥 Administradores</h3>
+      <p style={{color:"#64748b",fontSize:12,margin:"0 0 16px"}}>Pueden ver los datos de los residentes, visar registros y aprobar préstamos.</p>
+
+      <div style={{background:"#111827",borderRadius:14,padding:16,border:"1px solid #1f2937",marginBottom:18}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Agregar administrador</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre (opcional)" style={inp}/>
+          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setMsg(null);}} onKeyDown={e=>e.key==="Enter"&&agregar()} placeholder="correo@ejemplo.com" style={inp}/>
+          <button onClick={agregar} disabled={ocupado} style={{padding:"11px",borderRadius:9,border:"none",background:ocupado?"#374151":"#2563eb",color:"white",fontWeight:800,fontSize:13,cursor:ocupado?"not-allowed":"pointer"}}>
+            {ocupado?"Procesando…":"Agregar y enviar invitación"}
+          </button>
+          <div style={{fontSize:10,color:"#64748b"}}>La persona recibirá un correo para crear su contraseña. Tú nunca la conoces.</div>
+        </div>
+      </div>
+
+      {msg&&<div style={{padding:"10px 14px",borderRadius:8,marginBottom:14,fontSize:12,background:msg.t==="ok"?"#052e16":"#450a0a",border:`1px solid ${msg.t==="ok"?"#166534":"#7f1d1d"}`,color:msg.t==="ok"?"#86efac":"#fca5a5"}}>{msg.m}</div>}
+
+      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Principales</div>
+      {ADMIN_EMAILS.map(e=>fila(e,"Administrador principal (fijo)",true))}
+      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,margin:"16px 0 8px"}}>Agregados</div>
+      {loading?<div style={{color:"#64748b",fontSize:12,padding:10}}>Cargando…</div>
+        :admins.filter(a=>!ADMIN_EMAILS.includes(a.email)).length===0
+          ?<div style={{color:"#4b5563",fontSize:12,padding:10}}>Aún no hay administradores agregados.</div>
+          :admins.filter(a=>!ADMIN_EMAILS.includes(a.email)).map(a=>fila(a.email,`${a.nombre?a.nombre+" · ":""}agregado por ${a.agregadoPor||"—"}${a.agregadoAt?" · "+new Date(a.agregadoAt).toLocaleDateString("es-CL"):""}`,false))}
+    </div>
+  );
 };
 
 // ── SOLICITUDES TAB ──
@@ -1552,12 +1790,18 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
   useEffect(()=>{loadSolicitudes().then(d=>{setSolis(d);setLoading(false);});},[]);
 
   const aprobar = async (s) => {
-    await updateSolicitud(s.id,{estadoPrestamo:"activo",aprobadoAt:new Date().toISOString()});
-    setSolis(prev=>prev.map(x=>x.id===s.id?{...x,estadoPrestamo:"activo"}:x));
+    const hoy=new Date();
+    const dias=Number(s.diasPrestamo)||180;
+    const fechaVencP=s.fechaVencP||new Date(hoy.getTime()+dias*24*60*60*1000).toISOString().split("T")[0];
+    const patch={estadoPrestamo:"activo",aprobadoAt:hoy.toISOString(),fechaInicioP:s.fechaInicioP||hoy.toISOString().split("T")[0],fechaVencP};
+    const ok=await updateSolicitud(s.id,patch);
+    if(!ok){showToast("⚠️ No se pudo guardar la aprobación. Revisa tu conexión e inténtalo de nuevo.","info");return;}
+    setSolis(prev=>prev.map(x=>x.id===s.id?{...x,...patch}:x));
+    setRecords(prev=>prev[s.id]?({...prev,[s.id]:{...prev[s.id],...patch}}):prev);
     // Notificar via GAS
-    const p=new URLSearchParams({tipo:"aprobar_prestamo",estac_id:s.estacId,
-      nombre:s.nombre,email:s.email,nombreCedido:s.nombreCedido,emailCedido:s.emailCedido,
-      fechaVenc:s.fechaVencP||""});
+    const p=new URLSearchParams({tipo:"aprobar_prestamo",estac_id:String(s.estacId||s.id),
+      nombre:s.nombre||"",email:s.email||"",nombreCedido:s.nombreCedido||"",emailCedido:s.emailCedido||"",
+      fechaVenc:fechaVencP});
     new Image().src=GAS_URL+"?"+p.toString();
     showToast("✅ Préstamo aprobado — notificación enviada");
   };
@@ -1565,9 +1809,12 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
   const rechazar = async () => {
     if(!rechazarId||!motivo.trim())return;
     const s=solis.find(x=>x.id===rechazarId);
-    await updateSolicitud(rechazarId,{estadoPrestamo:"rechazado",motivoRechazo:motivo,rechazadoAt:new Date().toISOString()});
-    setSolis(prev=>prev.map(x=>x.id===rechazarId?{...x,estadoPrestamo:"rechazado",motivoRechazo:motivo}:x));
-    const p=new URLSearchParams({tipo:"rechazar_prestamo",estac_id:s?.estacId||"",
+    const patch={estadoPrestamo:"rechazado",motivoRechazo:motivo,rechazadoAt:new Date().toISOString()};
+    const ok=await updateSolicitud(rechazarId,patch);
+    if(!ok){showToast("⚠️ No se pudo guardar el rechazo. Revisa tu conexión e inténtalo de nuevo.","info");return;}
+    setSolis(prev=>prev.map(x=>x.id===rechazarId?{...x,...patch}:x));
+    setRecords(prev=>prev[rechazarId]?({...prev,[rechazarId]:{...prev[rechazarId],...patch}}):prev);
+    const p=new URLSearchParams({tipo:"rechazar_prestamo",estac_id:String(s?.estacId||rechazarId||""),
       nombre:s?.nombre||"",email:s?.email||"",motivo});
     new Image().src=GAS_URL+"?"+p.toString();
     setRechazarId(null);setMotivo("");
@@ -1582,8 +1829,10 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
 
   if(loading)return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando solicitudes...</div>;
 
-  const pendientes=solis.filter(s=>s.estadoPrestamo==="pendiente");
-  const resto=solis.filter(s=>s.estadoPrestamo!=="pendiente");
+  // Los préstamos guardados con la versión anterior no tienen estadoPrestamo: se tratan como pendientes
+  const estadoDe=(s)=>s.estadoPrestamo||"pendiente";
+  const pendientes=solis.filter(s=>estadoDe(s)==="pendiente");
+  const resto=solis.filter(s=>estadoDe(s)!=="pendiente");
 
   return (
     <div>
@@ -1794,7 +2043,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           </div>
         </div>
         <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#0a0f1e",borderRadius:10,padding:3}}>
-          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["solicitudes","🤝","Solicitudes"]].map(([k,icon,label])=>(
+          {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["solicitudes","🤝","Solicitudes"],["admins","👥","Admins"]].map(([k,icon,label])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:tab===k?"#2563eb":"transparent",color:tab===k?"white":"#4b5563",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
               <span>{icon}</span><span>{label}</span>
             </button>
@@ -1944,6 +2193,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
         )}
 
         {tab==="reclamos"&&<ReclamosTab/>}
+        {tab==="admins"&&<AdminsTab/>}
         {tab==="solicitudes"&&<SolicitudesTab records={records} setRecords={setRecords}/>}
         {tab==="dashboard"&&(()=>{
           const totalSpots=SPOTS_DATA.length;
@@ -2127,7 +2377,7 @@ export default function App() {
   useEffect(()=>{
     if(loadedRef.current)return;
     loadedRef.current=true;
-    loadRegistros().then(data=>setRecords(data)).catch(()=>{}).finally(()=>setLoading(false));
+    loadOcupacion().then(data=>setRecords(data)).catch(()=>{}).finally(()=>setLoading(false));
   },[]);
 
   const setRecordsAndSync=useCallback((updater)=>{
@@ -2149,8 +2399,16 @@ export default function App() {
 
   if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
-    if(!staffAuth) return <StaffLogin onSuccess={()=>setStaffAuth(true)} onBack={()=>setScreen("home")}/>;
-    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{setScreen("home");setStaffAuth(false);}}/>;
+    if(!staffAuth) return <StaffLogin onSuccess={async()=>{
+      setLoading(true);
+      const full=await loadRegistros();
+      setRecords(full);setStaffAuth(true);setLoading(false);
+      sincronizarPublico(JSON.parse(JSON.stringify(full)));
+    }} onBack={()=>setScreen("home")}/>;
+    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{
+      cerrarSesion();setStaffAuth(false);setScreen("home");
+      loadOcupacion().then(d=>setRecords(d));
+    }}/>;
   }
   return <HomeScreen onGo={setScreen}/>;
 }
