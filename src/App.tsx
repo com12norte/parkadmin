@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ── FIREBASE (Firestore + Auth vía REST) ──
-// Proyecto "parkadmin-a38a0" de la cuenta com12norte@gmail.com
-const FB_API_KEY = "AIzaSyDwKf88v3syQn-BYlq8REkUZblkOvEHR80";
-const FB_PROJECT = "parkadmin-a38a0";
+// Base única del edificio: proyecto "condoadmin-1eddc" de la cuenta com12norte@gmail.com.
+// Las colecciones de Parking llevan el prefijo "parking_" (ver COL más abajo).
+const FB_API_KEY = "AIzaSyBTVvEx7h2kt3NWXJpeSKn4hksU1nSzilE";
+const FB_PROJECT = "condoadmin-1eddc";
 const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
+// Nombre real de cada colección de Parking dentro de la base única
+const COL = (c) => `parking_${c}`;
 
 // ── Sesión de administración ──
 // Administradores principales: fijos, no se pueden quitar desde la app.
@@ -103,7 +106,7 @@ const fsCheck = async (res) => { if (!res.ok) throw new Error(`Firestore ${res.s
 const fsList = async (col) => {
   const out = []; let token = "";
   do {
-    const res = await fsCheck(await fetch(`${FS_BASE}/${col}?pageSize=300&key=${FB_API_KEY}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`, { headers: await fsHeaders() }));
+    const res = await fsCheck(await fetch(`${FS_BASE}/${COL(col)}?pageSize=300&key=${FB_API_KEY}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`, { headers: await fsHeaders() }));
     const j = await res.json();
     (j.documents || []).forEach(d => out.push(docToObj(d)));
     token = j.nextPageToken || "";
@@ -113,7 +116,7 @@ const fsList = async (col) => {
 // Crea o reemplaza un documento completo
 const fsSet = async (col, id, obj) => {
   const { _id, ...data } = obj;
-  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, {
+  await fsCheck(await fetch(`${FS_BASE}/${COL(col)}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, {
     method: "PATCH", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(data).mapValue.fields }),
   }));
@@ -121,26 +124,26 @@ const fsSet = async (col, id, obj) => {
 // Actualiza solo los campos indicados
 const fsUpdate = async (col, id, patch) => {
   const mask = Object.keys(patch).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
-  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?${mask}&key=${FB_API_KEY}`, {
+  await fsCheck(await fetch(`${FS_BASE}/${COL(col)}/${encodeURIComponent(id)}?${mask}&key=${FB_API_KEY}`, {
     method: "PATCH", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(patch).mapValue.fields }),
   }));
 };
 // Agrega un documento con id automático
 const fsAdd = async (col, obj) => {
-  await fsCheck(await fetch(`${FS_BASE}/${col}?key=${FB_API_KEY}`, {
+  await fsCheck(await fetch(`${FS_BASE}/${COL(col)}?key=${FB_API_KEY}`, {
     method: "POST", headers: await fsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ fields: toFs(obj).mapValue.fields }),
   }));
 };
 const fsDelete = async (col, id) => {
-  await fsCheck(await fetch(`${FS_BASE}/${col}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, { method: "DELETE", headers: await fsHeaders() }));
+  await fsCheck(await fetch(`${FS_BASE}/${COL(col)}/${encodeURIComponent(id)}?key=${FB_API_KEY}`, { method: "DELETE", headers: await fsHeaders() }));
 };
 // Consulta por igualdad de un campo
 const fsWhere = async (col, field, value) => {
   const res = await fsCheck(await fetch(`${FS_BASE}:runQuery?key=${FB_API_KEY}`, {
     method: "POST", headers: await fsHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: col }], where: { fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: toFs(value) } } } }),
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: COL(col) }], where: { fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: toFs(value) } } } }),
   }));
   const j = await res.json();
   return (Array.isArray(j) ? j : []).filter(r => r.document).map(r => docToObj(r.document));
@@ -198,7 +201,7 @@ const verificarAdmin = async (email) => {
   const e = normEmail(email);
   if (ADMIN_EMAILS.includes(e)) return true;
   try {
-    const r = await fetch(`${FS_BASE}/admins/${encodeURIComponent(e)}?key=${FB_API_KEY}`, { headers: await fsHeaders() });
+    const r = await fetch(`${FS_BASE}/${COL("admins")}/${encodeURIComponent(e)}?key=${FB_API_KEY}`, { headers: await fsHeaders() });
     return r.ok;
   } catch (x) { return false; }
 };
