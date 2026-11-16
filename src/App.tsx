@@ -2437,7 +2437,7 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 
 // ── ROOT ──
 export default function App() {
-  const [screen,setScreen]=useState(()=>new URLSearchParams(window.location.search).get("ir")==="residente"?"resident":"home");
+  const [screen,setScreen]=useState(()=>{const ir=new URLSearchParams(window.location.search).get("ir");return ir==="residente"?"resident":ir==="personal"?"staff":"home";});
   const [staffAuth,setStaffAuth]=useState(false);
   const [records,setRecords]=useState({});
   const [loading,setLoading]=useState(true);
