@@ -222,7 +222,7 @@ const verificarCorreo = async (id, email) => {
 };
 
 // ── EMAILJS ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwC1CGjIikpomM_T5pKT5Au65IUxOBjYlKGy9oozIQuKtpWSRl02xLLOZFtcr_grXptpg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxKiKdwZf-4S8A19f9NKpUVJiFnn9ZpZ1u5mDfpWzZtbp-F570M3Ui3Oa3Wzir7tDdCPQ/exec";
 
 const EMAILJS_SERVICE = "service_vxhdrlx";
 const EMAILJS_TEMPLATE = "template_dgshb8a";
