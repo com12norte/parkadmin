@@ -1866,7 +1866,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
     setSolis(prev=>prev.map(x=>x.id===s.id?{...x,...patch}:x));
     setRecords(prev=>prev[s.id]?({...prev,[s.id]:{...prev[s.id],...patch}}):prev);
     // Notificar via GAS
-    const p=new URLSearchParams({tipo:"aprobar_prestamo",estac_id:String(s.estacId||s.id),
+    const p=new URLSearchParams({tipo:"aprobar_prestamo",idToken:(await getIdToken())||"",estac_id:String(s.estacId||s.id),
       nombre:s.nombre||"",email:s.email||"",nombreCedido:s.nombreCedido||"",emailCedido:s.emailCedido||"",
       fechaVenc:fechaVencP});
     new Image().src=GAS_URL+"?"+p.toString();
@@ -1881,7 +1881,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
     if(!ok){showToast("⚠️ No se pudo guardar el rechazo. Revisa tu conexión e inténtalo de nuevo.","info");return;}
     setSolis(prev=>prev.map(x=>x.id===rechazarId?{...x,...patch}:x));
     setRecords(prev=>prev[rechazarId]?({...prev,[rechazarId]:{...prev[rechazarId],...patch}}):prev);
-    const p=new URLSearchParams({tipo:"rechazar_prestamo",estac_id:String(s?.estacId||rechazarId||""),
+    const p=new URLSearchParams({tipo:"rechazar_prestamo",idToken:(await getIdToken())||"",estac_id:String(s?.estacId||rechazarId||""),
       nombre:s?.nombre||"",email:s?.email||"",motivo});
     new Image().src=GAS_URL+"?"+p.toString();
     setRechazarId(null);setMotivo("");
