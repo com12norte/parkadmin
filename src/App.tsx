@@ -286,6 +286,15 @@ const sendComprobante = async ({datos={}, archivos=[]}) => {
   } catch(e){ console.error("Comprobante error:",e); return false; }
 };
 
+// Registro de Copropietarios = padrón maestro. El residente entra con un código a su correo,
+// y solo puede registrar patentes de las unidades donde su correo figura en ese registro.
+const API_CODIGO = "https://condoadmin-rouge.vercel.app/api/residente-codigo";
+const apiCodigo = async (body) => {
+  const r = await fetch(API_CODIGO, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  return { ok: r.ok && j.ok === true, ...j };
+};
+
 // Consulta al servidor si la unidad está en el padrón de copropietarios.
 // El padrón (nombres, RUT, correos) nunca se descarga al navegador.
 const consultarPadron = async (torre, depto) => {
@@ -1051,11 +1060,31 @@ const QueryTab = ({records}) => {
 };
 
 // ── RESIDENT ──
-const ResidentScreen = ({records,setRecords,onBack}) => {
+const ResidentScreen = ({records,setRecords,setLocal,onBack}) => {
+  // Acceso con correo del Registro de Copropietarios
+  const [acc,setAcc]=useState({correo:"",codigo:"",enviado:false,sesion:"",unidades:[],cargando:false,error:"",aviso:""});
+  const pedirCodigo=async()=>{
+    const correo=acc.correo.trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){setAcc(a=>({...a,error:"Escribe un correo válido"}));return;}
+    setAcc(a=>({...a,cargando:true,error:"",aviso:""}));
+    const j=await apiCodigo({accion:"enviar",email:correo,para:"parking"}).catch(()=>({ok:false,error:"Sin conexión"}));
+    setAcc(a=>({...a,cargando:false,enviado:j.ok,error:j.ok?"":(j.error||"No se pudo enviar el código"),aviso:j.ok?"Te enviamos un código de 6 dígitos a "+correo+". Revisa también spam.":""}));
+  };
+  const validarCodigo=async()=>{
+    const correo=acc.correo.trim().toLowerCase();
+    setAcc(a=>({...a,cargando:true,error:""}));
+    const v=await apiCodigo({accion:"verificar",email:correo,codigo:acc.codigo}).catch(()=>({ok:false,error:"Sin conexión"}));
+    if(!v.ok){setAcc(a=>({...a,cargando:false,error:v.error||"Código incorrecto"}));return;}
+    const r=await apiCodigo({accion:"registro",email:correo,sesion:v.sesion}).catch(()=>({ok:false}));
+    const unidades=(r.registros||[]).filter(u=>u.unidad&&BY_TD[u.unidad]);
+    setAcc(a=>({...a,cargando:false,sesion:v.sesion,unidades}));
+    setFormState(f=>({...f,email:correo}));
+    if(unidades.length===1){const [t,d]=unidades[0].unidad.split("-");setFormState(f=>({...f,torre:t,depto:d,email:correo}));}
+  };
   const [tab,setTab]=useState("form");
   const [toast,setToast]=useState(null);
   const [form,setFormState]=useState(emptyForm());
-  const [step,setStep]=useState(0);
+  const [step,setStep]=useState("correo");
   const [found,setFound]=useState(null);
   const [errors,setErrors]=useState({});
   const [emailInput,setEmailInput]=useState("");
@@ -1073,20 +1102,13 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     if(!form.torre||!form.depto){setErrors({lookup:"Selecciona dirección y departamento"});return;}
     const spot=BY_TD[`${form.torre}-${form.depto}`]||null;
     if(!spot){setErrors({lookup:"No se encontró asignación para esta dirección"});return;}
-    // Verificar en el servidor que la unidad esté en el padrón de copropietarios
-    setVerificando(true);setErrors({});
-    let enPadron=false,docs={documentosOk:true,faltan:[],siArrienda:[],sinFicha:false};
-    try{ const r=await consultarPadron(form.torre,form.depto); enPadron=r.enPadron; docs=r; }
-    catch(e){
-      setVerificando(false);
-      setErrors({lookup:"No se pudo verificar el padrón de copropietarios. Revisa tu conexión e inténtalo nuevamente."});
+    // La unidad debe estar en el Registro de Copropietarios con el correo verificado
+    const u=acc.unidades.find(x=>x.unidad===`${form.torre}-${form.depto}`);
+    if(!u){
+      setErrors({lookup:`UNIDAD NO REGISTRADA EN EL PADRÓN DE COPROPIETARIOS\n\nTu correo (${acc.correo.trim().toLowerCase()}) no figura en el Registro de Copropietarios para ${TORRES_LABELS[form.torre]||form.torre}, depto. ${form.depto}.\n\nPrimero completa el registro de tu unidad (o pide al propietario que te incluya) en:\nhttps://com12norte.github.io/administracion-edificio/copropietario.html`});
       return;
     }
-    setVerificando(false);
-    if(!enPadron){
-      setErrors({lookup:`UNIDAD NO REGISTRADA EN EL PADRÓN DE COPROPIETARIOS\n\nEstimado(a) Copropietario(a),\n\nPara poder registrar su estacionamiento, primero debe completar el registro de copropietarios. Le solicitamos adjuntar la siguiente documentación:\n\n• Certificado de dominio vigente de su unidad.\n• Copia de cédula de identidad del o los propietarios.\n\nSi usted arrienda la unidad, además debe adjuntar:\n• Copia del contrato de arrendamiento vigente.\n• Cédula de identidad del arrendatario y del arrendador.\n\nLa Ley 21.445 (Art. 5°) establece que todo copropietario debe incorporarse al registro de copropietarios.\n\nComplete su registro aquí: https://forms.gle/aiEgAzLoVhqSoNNg8\n\nAtentamente,\nAdministración — Comunidad de Edificios 12 Norte`});
-      return;
-    }
+    const docs={documentosOk:!u.faltan.length,faltan:u.faltan,siArrienda:[],sinFicha:false};
     // Además debe tener todos los documentos entregados (planilla "Listado de Documentos")
     if(!docs.documentosOk){
       // Descripción de cada documento tal como se le pide al copropietario
@@ -1095,7 +1117,7 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
         "CI Dueño":"Copia de la cédula de identidad del o los propietarios (por ambos lados)",
         "Contrato de Arriendo":"Copia simple del contrato de arrendamiento vigente, o declaración del propietario (arrendador)",
         "CI Arrendatario":"Copia de la cédula de identidad del arrendatario (por ambos lados)",
-        "Ficha de Registro":"Formulario de registro de copropietarios completo: https://forms.gle/aiEgAzLoVhqSoNNg8",
+        "Ficha de Registro":"Registro de copropietarios completo",
       };
       const linea=f=>`• ${DESC[f]||f}`;
       const partes=[];
@@ -1110,8 +1132,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     }
     setFound(spot);
     const rec=records[spot.id];
-    if(rec&&(rec.tieneEmail||rec.email)){setIsEditing(true);setEmailInput("");setErrors({});setStep("verify");}
-    else{setIsEditing(false);setErrors({});setStep(1);}
+    // El correo ya está verificado con el código y figura en el registro de la unidad
+    setIsEditing(!!rec);setErrors({});
+    if(rec)setFormState(f=>({...f,usoEstacionamiento:rec.usoEstacionamiento||"",
+      vehiculos:rec.vehiculos?.length?rec.vehiculos.map(v=>({patente:v.patente||"",marca:v.marca||"",color:v.color||"",esVisita:v.esVisita||"no",nombreVisita:v.nombreVisita||"",telefonoVisita:""})):f.vehiculos}));
+    setStep(1);
   };
 
   const [verificandoCorreo,setVerificandoCorreo]=useState(false);
@@ -1162,8 +1187,9 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
     else if(step===3)guardar();
   };
 
-  const guardar=()=>{
-    if(!found)return;
+  const [guardando,setGuardando]=useState(false);
+  const guardar=async()=>{
+    if(!found||guardando)return;
     const veh=form.vehiculos.filter(v=>v.patente.trim());
     const data={
       nombre:form.nombre,rut:form.rut,email:form.email,telefono:form.telefono,
@@ -1180,7 +1206,11 @@ const ResidentScreen = ({records,setRecords,onBack}) => {
       updatedAt:new Date().toISOString(),
       ...(isEditing?{}:{estadoRegistro:"pendiente",fechaRegistro:new Date().toISOString().split("T")[0]})
     };
-    setRecords(r=>({...r,[found.id]:data}));
+    setGuardando(true);
+    const g=await apiCodigo({accion:"parking_guardar",email:acc.correo.trim().toLowerCase(),sesion:acc.sesion,spotId:found.id,torre:found.torre,depto:found.depto,registro:data}).catch(()=>({ok:false,error:"Sin conexión"}));
+    setGuardando(false);
+    if(!g.ok){showToast("⚠️ "+(g.error||"No se pudo guardar el registro")+(g.faltan?.length?": "+g.faltan.join(", "):""),"info");return;}
+    setLocal(r=>({...r,[found.id]:g.publico}));
     const usoL={uso_exclusivo:"Uso exclusivo",visitas:"Para visitas",ceder_largo:"Préstamo largo plazo",sin_uso:"Sin uso"};
     const fechaStr=new Date().toLocaleString("es-CL");
     const resumen=`Estacionamiento #${found.id} · ${SECTOR_NAMES[found.sector]}
@@ -1252,13 +1282,13 @@ Una vez visado, recibirás un correo de confirmación.`;
     setStep(4);showToast("Registro guardado correctamente");
   };
 
-  const resetForm=()=>{setFormState(emptyForm());setFound(null);setStep(0);setErrors({});setIsEditing(false);setEmailInput("");};
+  const resetForm=()=>{setFormState({...emptyForm(),email:acc.correo.trim().toLowerCase()});setFound(null);setStep(acc.sesion?0:"correo");setErrors({});setIsEditing(false);setEmailInput("");};
   const addVehiculo=()=>{if(form.vehiculos.length<5)setFormState(f=>({...f,vehiculos:[...f.vehiculos,{patente:"",marca:"",color:"",esVisita:"no",nombreVisita:"",telefonoVisita:""}]}));};
   const updateVeh=(i,k,v)=>{setFormState(f=>({...f,vehiculos:f.vehiculos.map((x,j)=>j===i?{...x,[k]:k==="patente"?v.toUpperCase():v}:x)}));setErrors(e=>({...e,[`pat_${i}`]:""}));};
   const removeVeh=i=>setFormState(f=>({...f,vehiculos:f.vehiculos.filter((_,j)=>j!==i)}));
 
   const sc=found?SC[found.sector]:null;
-  const deptosFiltrados=form.torre?DEPTOS_ALL.filter(d=>BY_TD[`${form.torre}-${d}`]):[];
+  const deptosFiltrados=form.torre?DEPTOS_ALL.filter(d=>BY_TD[`${form.torre}-${d}`]&&acc.unidades.some(u=>u.unidad===`${form.torre}-${d}`)):[];
   const STEPS=["Dirección","Identificación","Uso","Vehículos"];
   const stepNum=typeof step==="number"?step:0;
 
@@ -1310,6 +1340,31 @@ Una vez visado, recibirás un correo de confirmación.`;
               </div>
             )}
 
+            {step==="correo"&&(
+              <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
+                <h2 style={{margin:"0 0 6px",fontSize:17,fontWeight:800,color:"#0f172a"}}>Ingresa con tu correo</h2>
+                <p style={{margin:"0 0 16px",fontSize:13,color:"#64748b",lineHeight:1.5}}>Usa el correo con que figuras en el <b>Registro de Copropietarios</b>. Te enviaremos un código para confirmar que eres tú.</p>
+                {!acc.sesion&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <input type="email" value={acc.correo} disabled={acc.enviado} onChange={e=>setAcc(a=>({...a,correo:e.target.value,error:""}))} placeholder="correo@ejemplo.com"
+                    style={{padding:"11px 12px",borderRadius:9,fontSize:14,border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"inherit",background:acc.enviado?"#f8fafc":"white"}}/>
+                  {acc.enviado&&<input inputMode="numeric" maxLength={6} value={acc.codigo} onChange={e=>setAcc(a=>({...a,codigo:e.target.value.replace(/\D/g,""),error:""}))} placeholder="Código de 6 dígitos"
+                    style={{padding:"11px 12px",borderRadius:9,fontSize:18,letterSpacing:4,textAlign:"center",border:"1.5px solid #e2e8f0",outline:"none",fontFamily:"monospace"}}/>}
+                  {acc.aviso&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 10px"}}>{acc.aviso}</div>}
+                  {acc.error&&<div style={{fontSize:12,color:"#9f1239",background:"#fff1f2",border:"1px solid #fecaca",borderRadius:8,padding:"8px 10px",whiteSpace:"pre-wrap"}}>{acc.error}{/Registro de Copropietarios/.test(acc.error)&&<><br/><a href="https://com12norte.github.io/administracion-edificio/copropietario.html" target="_blank" rel="noreferrer" style={{color:"#1e40af",fontWeight:700}}>Ir al Registro de Copropietarios →</a></>}</div>}
+                  <button disabled={acc.cargando||(acc.enviado&&acc.codigo.length!==6)} onClick={acc.enviado?validarCodigo:pedirCodigo}
+                    style={{padding:"12px",borderRadius:10,border:"none",background:"#1e40af",color:"white",fontWeight:700,fontSize:14,cursor:"pointer",opacity:acc.cargando?0.6:1}}>
+                    {acc.cargando?"Un momento…":acc.enviado?"Confirmar código":"Enviarme el código"}</button>
+                  {acc.enviado&&<button onClick={()=>setAcc(a=>({...a,enviado:false,codigo:"",aviso:"",error:""}))} style={{background:"none",border:"none",color:"#64748b",fontSize:12,cursor:"pointer"}}>Usar otro correo</button>}
+                </div>}
+                {acc.sesion&&(acc.unidades.length
+                  ?<div>
+                    <div style={{fontSize:13,color:"#166534",marginBottom:10}}>✅ Correo confirmado. Unidades a tu nombre en el registro:</div>
+                    {acc.unidades.map(u=>(<div key={u.unidad} style={{fontSize:13,padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}>{TORRES_LABELS[u.unidad.split("-")[0]]||u.unidad} · depto {u.unidad.split("-")[1]} <span style={{color:"#64748b"}}>({u.rol==="propietario"?"propietario":"residente"})</span>{u.faltan.length?<span style={{color:"#b45309"}}> · faltan documentos</span>:null}</div>))}
+                    <button onClick={()=>setStep(0)} style={{marginTop:14,width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#1e40af",color:"white",fontWeight:700,fontSize:14,cursor:"pointer"}}>Continuar →</button>
+                  </div>
+                  :<div style={{fontSize:13,color:"#9f1239"}}>Tu correo está en el registro, pero su unidad no tiene estacionamiento asignado. Escribe a com12norte@gmail.com.</div>)}
+              </div>
+            )}
             {step===0&&(
               <div style={{background:"white",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,.06)"}}>
                 <h2 style={{margin:"0 0 6px",fontSize:17,fontWeight:800,color:"#0f172a"}}>Dirección de tu unidad</h2>
@@ -1320,7 +1375,7 @@ Una vez visado, recibirás un correo de confirmación.`;
                     <select value={form.torre} onChange={e=>{setF("torre",e.target.value);setF("depto","");}}
                       style={{width:"100%",padding:"11px 12px",borderRadius:9,fontSize:14,fontWeight:600,border:"1.5px solid #e2e8f0",background:"white",outline:"none",cursor:"pointer",fontFamily:"monospace"}}>
                       <option value="">— Selecciona la dirección —</option>
-                      {TORRES.map(t=><option key={t} value={t}>{TORRES_LABELS[t]}</option>)}
+                      {TORRES.filter(t=>acc.unidades.some(u=>u.unidad.startsWith(t+"-"))).map(t=><option key={t} value={t}>{TORRES_LABELS[t]}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1426,7 +1481,7 @@ Una vez visado, recibirás un correo de confirmación.`;
                   {[["nombre","4. Nombre completo","Ej: Juan Pérez González","text",true],["rut","5. RUT / DNI","Ej: 12.345.678-9","text",true],["email","6. Correo electrónico","correo@ejemplo.com","email",false],["telefono","7. Teléfono","+56 9 1234 5678","tel",false]].map(([k,lbl,ph,type,req])=>(
                     <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
                       <label style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}{req&&<span style={{color:"#e53e3e"}}> *</span>}</label>
-                      <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph}
+                      <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={ph} readOnly={k==="email"&&!!acc.sesion}
                         style={{padding:"10px 12px",borderRadius:9,fontSize:13,border:`1.5px solid ${errors[k]?"#e53e3e":"#e2e8f0"}`,outline:"none",fontFamily:"inherit",background:"white"}}/>
                       {errors[k]&&<span style={{fontSize:10,color:"#e53e3e"}}>{errors[k]}</span>}
                     </div>
@@ -2466,7 +2521,7 @@ export default function App() {
     </div>
   );
 
-  if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} onBack={()=>setScreen("home")}/>;
+  if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} setLocal={setRecords} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
     if(!staffAuth) return <StaffLogin onSuccess={async()=>{
       setLoading(true);
