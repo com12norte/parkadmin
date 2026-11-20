@@ -197,9 +197,20 @@ const loadAdmins = async () => {
   try { return (await fsList("admins")).map(({ _id, ...a }) => ({ email: _id, ...a })); }
   catch (e) { console.error("loadAdmins:", e); return []; }
 };
+// Una sola lista de personal: los administradores de CondoAdmin (Configuración → Usuarios,
+// rol Administrador o Administrador Edificio, activos) también administran Parking.
+const esAdminCondo = async (e) => {
+  try {
+    const r = await fetch(`${FS_BASE}/roles/${encodeURIComponent(e)}?key=${FB_API_KEY}`, { headers: await fsHeaders() });
+    if (!r.ok) return false;
+    const d = docToObj(await r.json());
+    return d.active === true && ["Administrador", "Administrador Edificio"].includes(d.rol);
+  } catch (x) { return false; }
+};
 const verificarAdmin = async (email) => {
   const e = normEmail(email);
   if (ADMIN_EMAILS.includes(e)) return true;
+  if (await esAdminCondo(e)) return true;
   try {
     const r = await fetch(`${FS_BASE}/${COL("admins")}/${encodeURIComponent(e)}?key=${FB_API_KEY}`, { headers: await fsHeaders() });
     return r.ok;
@@ -1864,7 +1875,10 @@ const AdminsTab = () => {
   return (
     <div>
       <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>👥 Administradores</h3>
-      <p style={{color:"#64748b",fontSize:12,margin:"0 0 16px"}}>Pueden ver los datos de los residentes, visar registros y aprobar préstamos.</p>
+      <p style={{color:"#64748b",fontSize:12,margin:"0 0 10px"}}>Pueden ver los datos de los residentes, visar registros y aprobar préstamos.</p>
+      <div style={{background:"#0b2545",border:"1px solid #1e3a8a",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#bfdbfe",margin:"0 0 16px",lineHeight:1.5}}>
+        La lista principal de personal está en <b>CondoAdmin → Configuración → Usuarios</b>. Todo usuario activo con rol <b>Administrador</b> o <b>Administrador Edificio</b> entra aquí con su misma cuenta, sin agregarlo de nuevo. Usa esta lista solo para alguien que administre Parking y no esté en CondoAdmin.
+      </div>
 
       <div style={{background:"#111827",borderRadius:14,padding:16,border:"1px solid #1f2937",marginBottom:18}}>
         <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Agregar administrador</div>
