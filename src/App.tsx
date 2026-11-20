@@ -2518,6 +2518,32 @@ export default function App() {
     loadOcupacion().then(data=>setRecords(data)).catch(()=>{}).finally(()=>setLoading(false));
   },[]);
 
+  const entrarPersonal=async()=>{
+    setLoading(true);
+    const full=await loadRegistros();
+    setRecords(full);setStaffAuth(true);setLoading(false);
+    sincronizarPublico(JSON.parse(JSON.stringify(full)));
+  };
+  // Dentro de CondoAdmin: entra directo con la sesión del usuario de CondoAdmin, sin volver a pedir contraseña
+  const enCondo=window.self!==window.top;
+  const [condoMsg,setCondoMsg]=useState(enCondo?"Conectando con tu sesión de CondoAdmin…":"");
+  useEffect(()=>{
+    if(!enCondo)return;
+    const alRecibir=async(ev)=>{
+      if(ev.origin!=="https://condoadmin-rouge.vercel.app"||!ev.data||ev.data.tipo!=="condoadmin-sesion"||!ev.data.token)return;
+      const d=ev.data;
+      const yaEstaba=!!fbSession;
+      fbSession={idToken:d.token,refreshToken:d.refreshToken||"",exp:Date.now()+50*60*1000,email:normEmail(d.email),admin:false};
+      if(yaEstaba)return; // solo renovación del token
+      const ok=await verificarAdmin(d.email);
+      if(!ok){cerrarSesion();setCondoMsg("Tu usuario de CondoAdmin no tiene permisos de administración de Parking.");return;}
+      fbSession.admin=true;setCondoMsg("");setScreen("staff");await entrarPersonal();
+    };
+    window.addEventListener("message",alRecibir);
+    try{window.parent.postMessage({tipo:"listo-para-sesion"},"https://condoadmin-rouge.vercel.app");}catch(e){}
+    return()=>window.removeEventListener("message",alRecibir);
+  },[]);
+
   const setRecordsAndSync=useCallback((updater)=>{
     setRecords(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
@@ -2527,6 +2553,9 @@ export default function App() {
     });
   },[]);
 
+  if(enCondo&&condoMsg)return(
+    <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontFamily:"system-ui",fontSize:14,padding:20,textAlign:"center"}}>{condoMsg}</div>
+  );
   if(loading)return(
     <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <div style={{width:50,height:50,border:"3px solid #1e3a5f",borderTop:"3px solid #3b82f6",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
@@ -2537,12 +2566,7 @@ export default function App() {
 
   if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} setLocal={setRecords} onBack={()=>setScreen("home")}/>;
   if(screen==="staff"){
-    if(!staffAuth) return <StaffLogin onSuccess={async()=>{
-      setLoading(true);
-      const full=await loadRegistros();
-      setRecords(full);setStaffAuth(true);setLoading(false);
-      sincronizarPublico(JSON.parse(JSON.stringify(full)));
-    }} onBack={()=>setScreen("home")}/>;
+    if(!staffAuth) return <StaffLogin onSuccess={entrarPersonal} onBack={()=>setScreen("home")}/>;
     return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{
       cerrarSesion();setStaffAuth(false);setScreen("home");
       loadOcupacion().then(d=>setRecords(d));
