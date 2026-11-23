@@ -416,15 +416,15 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
       sin_uso:'#78716c',
     };
     const uso=rec?.usoEstacionamiento||'uso_exclusivo';
-    const fill=hl?'#facc15':occ?(usoColor[uso]||'#14532d'):'#1e2d45';
-    const stk=hl?'#fde047':occ?(usoAccent[uso]||'#22c55e'):'#2d4060';
-    const nc=hl?'#0f172a':occ?'#fff':'#4a6080';
-    const sc2=hl?'#1e3a5f':occ?'rgba(255,255,255,.6)':'#2d3f55';
+    const fill=hl?'#facc15':occ?(usoColor[uso]||'#14532d'):'#ffffff';
+    const stk=hl?'#ca8a04':occ?(usoAccent[uso]||'#22c55e'):'#cbd5e1';
+    const nc=hl?'#0f172a':occ?'#fff':'#94a3b8';
+    const sc2=hl?'#1e3a5f':occ?'rgba(255,255,255,.75)':'#94a3b8';
     const inf=SPOT_INFO[id];
     const halo=hl?`<rect x="${x-3}" y="${y-3}" width="${w+6}" height="${h+6}" rx="7" fill="none" stroke="#facc15" stroke-width="2" opacity=".5"/>`:'';
     const pat=occ&&rec?.patentes?.[0]?`<text x="${x+w/2}" y="${y-6}" text-anchor="middle" font-size="6" font-family="monospace" font-weight="700" fill="${usoAccent[uso]||'#22c55e'}">${rec.patentes[0]}</text>`:'';
     return `${pat}<g style="cursor:pointer" data-id="${id}">
-      <rect x="${x+1}" y="${y+2}" width="${w}" height="${h}" rx="4" fill="rgba(0,0,0,.28)"/>
+      <rect x="${x+1}" y="${y+2}" width="${w}" height="${h}" rx="4" fill="rgba(15,23,42,.06)"/>
       <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${fill}" stroke="${stk}" stroke-width="${hl?2.5:occ?1.5:1}"/>
       <text x="${x+w/2}" y="${y+h*.42}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="900" font-family="monospace" fill="${nc}">#${id}</text>
       ${inf?`<text x="${x+w/2}" y="${y+h*.78}" text-anchor="middle" dominant-baseline="middle" font-size="6.5" font-family="monospace" fill="${sc2}">${inf.torre} ${inf.depto}</text>`:''}
@@ -462,7 +462,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const PASO=200; W=PAD+DW+G+SW+G+PASO+G+SW+G+DW+PAD;
     const rows=cI.length+1+bI.length; H=RD+PAD+rows*(SH+G)-G+PAD+RD;
     const xL=PAD+DW+G,xR=W-PAD-DW-G-SW,y0=RD+PAD;
-    svg+=`<rect width="${W}" height="${H}" fill="#0f172a" rx="8"/>`;
+    svg+=`<rect width="${W}" height="${H}" fill="#f8fafc" rx="8"/>`;
     svg+=roadEl(W,H,'← Salida 3 oriente','Salida 4 Oriente →');
     svg+=doorEl(PAD,4,DW,RD-6,['Puerta de','acceso 1080']);
     svg+=doorEl(W-PAD-DW,4,DW,RD-6,['Puerta de','acceso 1036']);
@@ -484,7 +484,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const izqH=NBH+G+SH+G+SH+G+SH+G+SH+G+NBH,derH=der.length*(SH+G)-G,contH=Math.max(izqH,derH);
     H=RD+PAD+contH+PAD+RD;
     const xI=PAD,xD=W-PAD-DW-G-SW,xDr=W-PAD-DW,y0=RD+PAD;
-    svg+=`<rect width="${W}" height="${H}" fill="#0f172a" rx="8"/>`;
+    svg+=`<rect width="${W}" height="${H}" fill="#f8fafc" rx="8"/>`;
     svg+=roadEl(W,H,'← Salida 3 Oriente','Salida 4 Oriente →');
     svg+=doorEl(xDr,4,DW,RD-6,['Puerta de','acceso 1038']);
     let y=y0;
@@ -507,7 +507,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     const cI=[18,19,20,21,22,23,24,25,26],cD=[9,10,11,12,13,14,15,16,17];
     const bodyH=Math.max(cI.length,cD.length)*(SH+YGAP)-YGAP;
     H=yBody+bodyH+PAD+RD;
-    svg+=`<rect width="${W}" height="${H}" fill="#0f172a" rx="8"/>`;
+    svg+=`<rect width="${W}" height="${H}" fill="#f8fafc" rx="8"/>`;
     svg+=roadEl(W,H,'← Salida 3 Oriente','Salida 4 Oriente →');
     svg+=`<rect x="0" y="${yGray}" width="${W}" height="${grayH}" fill="#1a2535" stroke="#1e3a5f" stroke-width="1"/>`;
     const top=[6,5,4,3,2,1],tW=top.length*(SW+G)-G,tX=(W-tW)/2;
@@ -517,7 +517,7 @@ const SectorMap = ({sectorId,records,onSpotClick,highlightId}) => {
     svg+=doorEl(xDR,yDoors,DW,doorH,['Puerta de','acceso 1081']);
     svg+=`<rect x="${xCR}" y="${yDoors}" width="${SW}" height="${doorH}" rx="4" fill="#facc15" stroke="#b45309" stroke-width="1.5"/>`;
     const comX=xPaso,comW=PASO*.65|0;
-    svg+=`<rect x="${comX}" y="${yComedor}" width="${comW}" height="${comedorH}" rx="4" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>`;
+    svg+=`<rect x="${comX}" y="${yComedor}" width="${comW}" height="${comedorH}" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1.5"/>`;
     svg+=`<text x="${comX+comW/2}" y="${yComedor+comedorH/2-6}" text-anchor="middle" dominant-baseline="middle" font-size="8" font-family="monospace" font-weight="700" fill="#64748b">Comedor y</text>`;
     svg+=`<text x="${comX+comW/2}" y="${yComedor+comedorH/2+7}" text-anchor="middle" dominant-baseline="middle" font-size="8" font-family="monospace" font-weight="700" fill="#64748b">Camarines</text>`;
     svg+=spotEl(7,xCR,yComedor,SW,comedorH);
@@ -587,7 +587,7 @@ const ReclamoModal = ({spot, record, onClose, onSent}) => {
   };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20,backdropFilter:"blur(4px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#0f172a",borderRadius:18,width:"100%",maxWidth:420,border:"1.5px solid #dc2626",boxShadow:"0 24px 64px rgba(0,0,0,.7)",overflow:"hidden"}}>
+      <div style={{background:"#ffffff",borderRadius:18,width:"100%",maxWidth:420,border:"1.5px solid #dc2626",boxShadow:"0 24px 64px rgba(15,23,42,.25)",overflow:"hidden"}}>
         <div style={{background:"#7f1d1d",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:10,color:"#fca5a5",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Estac. #{spot.id} · {SECTOR_NAMES[spot.sector]}</div>
@@ -596,18 +596,18 @@ const ReclamoModal = ({spot, record, onClose, onSent}) => {
           <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16}}>✕</button>
         </div>
         <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:12}}>
-          <div style={{background:"#1e293b",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#94a3b8"}}>
+          <div style={{background:"#f8fafc",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#64748b"}}>
             <strong style={{color:"white"}}>Registrado a:</strong> {record?.nombre||"—"} · Patente(s): {(record?.patentes||[]).join(", ")||"—"}
           </div>
           <div>
             <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Tu correo (opcional)</label>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="para recibir respuesta"
-              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#f8fafc",color:"#0f172a",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
           </div>
           <div>
             <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Descripción <span style={{color:"#e53e3e"}}>*</span></label>
             <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3} placeholder="Describe brevemente la situación..."
-              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"9px 12px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#f8fafc",color:"#0f172a",outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #1e3a5f",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
@@ -630,18 +630,18 @@ const ReclamosTab = () => {
       .then(d=>{ setReclamos(d.map(r=>({...r,created_at:r.createdAt||r.created_at})).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,50)); setLoading(false); })
       .catch(()=>setLoading(false));
   },[]);
-  if(loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando reclamos...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Cargando reclamos...</div>;
   return (
     <div>
-      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 16px"}}>⚠️ Reportes de ocupación indebida</h3>
+      <h3 style={{color:"#0f172a",fontSize:14,fontWeight:800,margin:"0 0 16px"}}>⚠️ Reportes de ocupación indebida</h3>
       {reclamos.length===0&&<div style={{textAlign:"center",padding:40,color:"#4b5563",fontSize:13}}>No hay reportes registrados.</div>}
       {reclamos.map((r,i)=>(
-        <div key={i} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #1f2937"}}>
+        <div key={i} style={{background:"#ffffff",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #e2e8f0"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-            <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{r.estac_id} — Torre {r.torre} · {r.depto}</div>
+            <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>Estac. #{r.estac_id} — Torre {r.torre} · {r.depto}</div>
             <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{r.created_at?new Date(r.created_at).toLocaleDateString("es-CL"):""}</span>
           </div>
-          <div style={{fontSize:12,color:"#94a3b8",marginBottom:4}}>{r.descripcion}</div>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{r.descripcion}</div>
           {r.email_reporta&&r.email_reporta!=="no indicado"&&<div style={{fontSize:10,color:"#4b5563"}}>Reportado por: {r.email_reporta}</div>}
         </div>
       ))}
@@ -669,7 +669,7 @@ const Legend = ({color,label}) => (
 );
 const SummaryRow = ({label,value}) => (
   <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
-    <span style={{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,flexShrink:0}}>{label}</span>
+    <span style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,flexShrink:0}}>{label}</span>
     <span style={{fontSize:12,color:"#0f172a",fontWeight:600,textAlign:"right"}}>{value||"—"}</span>
   </div>
 );
@@ -710,14 +710,14 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#0f172a",border:`1.5px solid ${sc.accent}50`,borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.7)",maxHeight:"90vh",overflowY:"auto"}}>
+      <div style={{background:"#ffffff",border:`1.5px solid ${sc.accent}50`,borderRadius:18,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 24px 64px rgba(15,23,42,.25)",maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{padding:"18px 20px 14px",background:sc.bg,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:sc.accent,textTransform:"uppercase",letterSpacing:1.5,marginBottom:4}}>{SECTOR_NAMES[spot.sector]}</div>
-            <div style={{fontSize:22,fontWeight:900,color:"white",fontFamily:"monospace"}}>Estac. #{spot.id}</div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:2}}>Torre {spot.torre} · Depto {spot.depto}</div>
+            <div style={{fontSize:22,fontWeight:900,color:"#0f172a",fontFamily:"monospace"}}>Estac. #{spot.id}</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Torre {spot.torre} · Depto {spot.depto}</div>
           </div>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16}}>✕</button>
+          <button onClick={onClose} style={{background:"rgba(15,23,42,.05)",border:"none",color:"#0f172a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16}}>✕</button>
         </div>
         <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
           <div>
@@ -725,8 +725,8 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
             {patentes.map((p,i)=>(
               <div key={i} style={{display:"flex",gap:6,marginBottom:7}}>
                 <input value={p} onChange={e=>setPatentes(pt=>pt.map((x,j)=>j===i?e.target.value.toUpperCase():x))} placeholder={`Patente ${i+1}`} maxLength={8}
-                  style={{flex:1,padding:"10px 14px",borderRadius:9,fontSize:15,fontWeight:800,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",fontFamily:"monospace",letterSpacing:3,textTransform:"uppercase"}}/>
-                {patentes.length>1&&<button onClick={()=>setPatentes(pt=>pt.filter((_,j)=>j!==i))} style={{padding:"0 11px",borderRadius:9,border:"1.5px solid #7f1d1d",background:"#450a0a",color:"#f87171",cursor:"pointer",fontSize:15}}>−</button>}
+                  style={{flex:1,padding:"10px 14px",borderRadius:9,fontSize:15,fontWeight:800,border:"1.5px solid #1e3a5f",background:"#f1f5f9",color:"#0f172a",outline:"none",fontFamily:"monospace",letterSpacing:3,textTransform:"uppercase"}}/>
+                {patentes.length>1&&<button onClick={()=>setPatentes(pt=>pt.filter((_,j)=>j!==i))} style={{padding:"0 11px",borderRadius:9,border:"1.5px solid #fecaca",background:"#fef2f2",color:"#dc2626",cursor:"pointer",fontSize:15}}>−</button>}
               </div>
             ))}
             {patentes.length<5&&<button onClick={()=>setPatentes(p=>[...p,""])} style={{width:"100%",padding:"7px",borderRadius:9,border:`1.5px dashed ${sc.accent}70`,background:"rgba(255,255,255,.03)",color:sc.accent,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Agregar patente</button>}
@@ -734,7 +734,7 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
           {[["Propietario",propietario,setPropietario,"Nombre completo"],["Teléfono",telefono,setTelefono,"+56 9 ..."],["Vehículo",vehiculo,setVehiculo,"Marca/Color"]].map(([lbl,val,setter,ph])=>(
             <div key={lbl} style={{display:"flex",flexDirection:"column",gap:4}}>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5}}>{lbl}</label>
-              <input value={val} onChange={e=>setter(e.target.value)} placeholder={ph} style={{padding:"8px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#1e293b",color:"white",outline:"none",fontFamily:"inherit"}}/>
+              <input value={val} onChange={e=>setter(e.target.value)} placeholder={ph} style={{padding:"8px 11px",borderRadius:8,fontSize:13,border:"1.5px solid #1e3a5f",background:"#f1f5f9",color:"#0f172a",outline:"none",fontFamily:"inherit"}}/>
             </div>
           ))}
 
@@ -745,7 +745,7 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
               <span>{showHist?"▲":"▼"}</span>
             </button>
             {showHist&&(
-              <div style={{marginTop:8,background:"#0a0f1e",borderRadius:8,padding:10,border:"1px solid #1e293b"}}>
+              <div style={{marginTop:8,background:"#f1f5f9",borderRadius:8,padding:10,border:"1px solid #e2e8f0"}}>
                 {loadingHist&&<div style={{color:"#4b5563",fontSize:11,textAlign:"center",padding:8}}>Cargando...</div>}
                 {!loadingHist&&historial.length===0&&<div style={{color:"#4b5563",fontSize:11,textAlign:"center",padding:8}}>Sin historial registrado</div>}
                 {historial.map((h,i)=>(
@@ -763,9 +763,9 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
           </div>
         </div>
         <div style={{padding:"0 20px 20px",display:"flex",gap:8,justifyContent:"space-between"}}>
-          <div>{record&&<button onClick={()=>{addHistorial(spot.id,"Liberación",`Liberado por staff`);onDelete();}} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #7f1d1d",background:"#450a0a",color:"#f87171",fontWeight:700,fontSize:12,cursor:"pointer"}}>Liberar</button>}</div>
+          <div>{record&&<button onClick={()=>{addHistorial(spot.id,"Liberación",`Liberado por staff`);onDelete();}} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #fecaca",background:"#fef2f2",color:"#dc2626",fontWeight:700,fontSize:12,cursor:"pointer"}}>Liberar</button>}</div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={onClose} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #1e3a5f",background:"transparent",color:"#94a3b8",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={onClose} style={{padding:"9px 16px",borderRadius:9,border:"1.5px solid #1e3a5f",background:"transparent",color:"#64748b",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancelar</button>
             <button onClick={save} style={{padding:"9px 22px",borderRadius:9,border:"none",background:sc.accent,color:"#0f172a",fontWeight:900,fontSize:12,cursor:"pointer"}}>Guardar</button>
           </div>
         </div>
@@ -776,12 +776,12 @@ const SpotModal = ({spot,record,onClose,onSave,onDelete}) => {
 
 const ConfirmDialog = ({msg,onConfirm,onCancel}) => (
   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20,backdropFilter:"blur(4px)"}}>
-    <div style={{background:"#1e293b",borderRadius:16,padding:28,maxWidth:320,width:"100%",border:"1.5px solid #334155",textAlign:"center"}}>
+    <div style={{background:"#f1f5f9",borderRadius:16,padding:28,maxWidth:320,width:"100%",border:"1.5px solid #e2e8f0",textAlign:"center"}}>
       <div style={{fontSize:36,marginBottom:14}}>⚠️</div>
-      <div style={{fontSize:15,fontWeight:700,color:"white",marginBottom:8}}>¿Confirmar eliminación?</div>
-      <div style={{fontSize:13,color:"#94a3b8",marginBottom:22,lineHeight:1.5}}>{msg}</div>
+      <div style={{fontSize:15,fontWeight:700,color:"#0f172a",marginBottom:8}}>¿Confirmar eliminación?</div>
+      <div style={{fontSize:13,color:"#64748b",marginBottom:22,lineHeight:1.5}}>{msg}</div>
       <div style={{display:"flex",gap:10}}>
-        <button onClick={onCancel} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #334155",background:"transparent",color:"#94a3b8",fontWeight:700,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={onCancel} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"transparent",color:"#64748b",fontWeight:700,fontSize:13,cursor:"pointer"}}>Cancelar</button>
         <button onClick={onConfirm} style={{flex:1,padding:"10px",borderRadius:9,border:"none",background:"#dc2626",color:"white",fontWeight:800,fontSize:13,cursor:"pointer"}}>Eliminar</button>
       </div>
     </div>
@@ -858,34 +858,34 @@ const StaffLogin = ({onSuccess,onBack}) => {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#0a0f1e 0%,#1a2236 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",fontFamily:"system-ui,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f1f5f9 0%,#f8fafc 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",fontFamily:"system-ui,sans-serif"}}>
       <div style={{width:"100%",maxWidth:380}}>
-        <button onClick={onBack} style={{background:"rgba(255,255,255,.08)",border:"none",color:"#94a3b8",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:14,marginBottom:28}}>← Volver</button>
+        <button onClick={onBack} style={{background:"rgba(15,23,42,.05)",border:"none",color:"#64748b",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:14,marginBottom:28}}>← Volver</button>
         <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{width:70,height:70,borderRadius:20,background:"linear-gradient(135deg,#1f2937,#374151)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px",boxShadow:"0 10px 30px rgba(0,0,0,.4)"}}>🔑</div>
-          <h2 style={{margin:0,fontSize:22,fontWeight:900,color:"white",letterSpacing:-0.5}}>Acceso Personal</h2>
+          <div style={{width:70,height:70,borderRadius:20,background:"linear-gradient(135deg,#f8fafc,#e2e8f0)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px",boxShadow:"0 10px 30px rgba(0,0,0,.4)"}}>🔑</div>
+          <h2 style={{margin:0,fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:-0.5}}>Acceso Personal</h2>
           <p style={{margin:"6px 0 0",fontSize:13,color:"#4b5563"}}>Administración · Conserjería</p>
         </div>
-        <div style={{background:"#111827",borderRadius:18,padding:24,border:"1px solid #1f2937",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
+        <div style={{background:"#ffffff",borderRadius:18,padding:24,border:"1px solid #e2e8f0",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
               <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} placeholder="correo@ejemplo.com"
-                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#fca5a5":"#e2e8f0"}`,background:"#ffffff",color:"#0f172a",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Contraseña</label>
               <input type="password" value={pass} onChange={e=>{setPass(e.target.value);setError("");}} placeholder="••••••••"
-                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#7f1d1d":"#1f2937"}`,background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${error?"#fca5a5":"#e2e8f0"}`,background:"#ffffff",color:"#0f172a",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
-            {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#450a0a",border:"1px solid #7f1d1d",fontSize:12,color:"#fca5a5"}}>⚠️ {error}</div>}
-            {aviso&&<div style={{padding:"10px 14px",borderRadius:8,background:"#052e16",border:"1px solid #166534",fontSize:12,color:"#86efac"}}>✉️ {aviso}</div>}
+            {error&&<div style={{padding:"10px 14px",borderRadius:8,background:"#fef2f2",border:"1px solid #fecaca",fontSize:12,color:"#b91c1c"}}>⚠️ {error}</div>}
+            {aviso&&<div style={{padding:"10px 14px",borderRadius:8,background:"#f0fdf4",border:"1px solid #166534",fontSize:12,color:"#15803d"}}>✉️ {aviso}</div>}
             <button onClick={login} disabled={loading}
               style={{padding:"13px",borderRadius:10,border:"none",background:loading?"#374151":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontWeight:800,fontSize:15,cursor:loading?"not-allowed":"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              {loading?<><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
+              {loading?<><span style={{width:16,height:16,border:"2px solid #e2e8f0",borderTop:"2px solid white",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite"}}/> Verificando...</>:"Ingresar →"}
             </button>
             <button onClick={recuperar} disabled={enviando}
-              style={{background:"none",border:"none",color:"#60a5fa",fontSize:12,cursor:"pointer",padding:4,textDecoration:"underline"}}>
+              style={{background:"none",border:"none",color:"#2563eb",fontSize:12,cursor:"pointer",padding:4,textDecoration:"underline"}}>
               {enviando?"Enviando…":"¿Olvidaste tu contraseña?"}
             </button>
           </div>
@@ -908,15 +908,15 @@ const HomeScreen = ({onGo}) => {
     </button>
   );
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#0a0f1e 0%,#1a2236 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px"}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f1f5f9 0%,#f8fafc 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px"}}>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:44,transform:show?"translateY(0)":"translateY(-18px)",opacity:show?1:0,transition:"transform .5s cubic-bezier(.22,1,.36,1), opacity .5s"}}>
         <div style={{width:90,height:90,borderRadius:28,background:"linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:46,boxShadow:"0 20px 50px rgba(37,99,235,.5)",marginBottom:22}}>🅿</div>
-        <h1 style={{margin:0,fontSize:34,fontWeight:900,color:"white",letterSpacing:-1.2,fontFamily:"Georgia,serif"}}>ParkAdmin</h1>
+        <h1 style={{margin:0,fontSize:32,fontWeight:800,color:"#0f172a",letterSpacing:-0.8}}>Parking</h1>
         <p style={{margin:"7px 0 0",fontSize:13,color:"#4a5568",fontWeight:500}}>Gestión de Estacionamientos · {SPOTS_DATA.length} espacios</p>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:390}}>
         {card("🏠","Soy Residente","Registra tus patentes y consulta tu estacionamiento asignado","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
-        {card("🔑","Acceso Personal","Verificar patente · Administración · Conserjería","staff","linear-gradient(135deg,#111827 0%,#1f2937 100%)",210)}
+        {card("🔑","Acceso Personal","Verificar patente · Administración · Conserjería","staff","linear-gradient(135deg,#1e3a5f 0%,#2e5490 100%)",210)}
       </div>
       <div style={{marginTop:38,display:"flex",gap:18,transform:show?"translateY(0)":"translateY(10px)",opacity:show?1:0,transition:"all .6s 350ms"}}>
         {Object.entries(SC).map(([k,sc])=>(
@@ -1859,29 +1859,29 @@ const AdminsTab = () => {
   };
 
   const fila=(e,sub,fijo)=>(
-    <div key={e} style={{background:"#0f172a",borderRadius:12,padding:"12px 14px",marginBottom:8,border:"1px solid #1f2937",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+    <div key={e} style={{background:"#ffffff",borderRadius:12,padding:"12px 14px",marginBottom:8,border:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
       <div style={{minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:700,color:"white",wordBreak:"break-all"}}>{e}{e===yo&&<span style={{color:"#60a5fa",fontWeight:600}}> (tú)</span>}</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#0f172a",wordBreak:"break-all"}}>{e}{e===yo&&<span style={{color:"#2563eb",fontWeight:600}}> (tú)</span>}</div>
         <div style={{fontSize:10,color:"#64748b"}}>{sub}</div>
       </div>
       <div style={{display:"flex",gap:6,flexShrink:0}}>
-        <button onClick={()=>reenviar(e)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✉️ Contraseña</button>
-        {!fijo&&e!==yo&&<button onClick={()=>quitar(e)} disabled={ocupado} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #7f1d1d",background:"transparent",color:"#fca5a5",fontSize:11,cursor:"pointer"}}>Quitar</button>}
+        <button onClick={()=>reenviar(e)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #e2e8f0",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>✉️ Contraseña</button>
+        {!fijo&&e!==yo&&<button onClick={()=>quitar(e)} disabled={ocupado} style={{padding:"6px 10px",borderRadius:8,border:"1px solid #fecaca",background:"transparent",color:"#b91c1c",fontSize:11,cursor:"pointer"}}>Quitar</button>}
       </div>
     </div>
   );
 
-  const inp={width:"100%",padding:"11px 12px",borderRadius:9,fontSize:13,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const inp={width:"100%",padding:"11px 12px",borderRadius:9,fontSize:13,border:"1.5px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
   return (
     <div>
-      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>👥 Administradores</h3>
+      <h3 style={{color:"#0f172a",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>👥 Administradores</h3>
       <p style={{color:"#64748b",fontSize:12,margin:"0 0 10px"}}>Pueden ver los datos de los residentes, visar registros y aprobar préstamos.</p>
-      <div style={{background:"#0b2545",border:"1px solid #1e3a8a",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#bfdbfe",margin:"0 0 16px",lineHeight:1.5}}>
+      <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#1e40af",margin:"0 0 16px",lineHeight:1.5}}>
         La lista principal de personal está en <b>CondoAdmin → Configuración → Usuarios</b>. Todo usuario activo con rol <b>Administrador</b> o <b>Administrador Edificio</b> entra aquí con su misma cuenta, sin agregarlo de nuevo. Usa esta lista solo para alguien que administre Parking y no esté en CondoAdmin.
       </div>
 
-      <div style={{background:"#111827",borderRadius:14,padding:16,border:"1px solid #1f2937",marginBottom:18}}>
-        <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Agregar administrador</div>
+      <div style={{background:"#ffffff",borderRadius:14,padding:16,border:"1px solid #e2e8f0",marginBottom:18}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Agregar administrador</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre (opcional)" style={inp}/>
           <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setMsg(null);}} onKeyDown={e=>e.key==="Enter"&&agregar()} placeholder="correo@ejemplo.com" style={inp}/>
@@ -1894,9 +1894,9 @@ const AdminsTab = () => {
 
       {msg&&<div style={{padding:"10px 14px",borderRadius:8,marginBottom:14,fontSize:12,background:msg.t==="ok"?"#052e16":"#450a0a",border:`1px solid ${msg.t==="ok"?"#166534":"#7f1d1d"}`,color:msg.t==="ok"?"#86efac":"#fca5a5"}}>{msg.m}</div>}
 
-      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Principales</div>
+      <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Principales</div>
       {ADMIN_EMAILS.map(e=>fila(e,"Administrador principal (fijo)",true))}
-      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,margin:"16px 0 8px"}}>Agregados</div>
+      <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,margin:"16px 0 8px"}}>Agregados</div>
       {loading?<div style={{color:"#64748b",fontSize:12,padding:10}}>Cargando…</div>
         :admins.filter(a=>!ADMIN_EMAILS.includes(a.email)).length===0
           ?<div style={{color:"#4b5563",fontSize:12,padding:10}}>Aún no hay administradores agregados.</div>
@@ -1963,7 +1963,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
     return <span style={{padding:"3px 10px",borderRadius:20,background:c.bg,color:c.color,fontSize:10,fontWeight:700}}>{c.label}</span>;
   };
 
-  if(loading)return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Cargando solicitudes...</div>;
+  if(loading)return <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Cargando solicitudes...</div>;
 
   // Los préstamos guardados con la versión anterior no tienen estadoPrestamo: se tratan como pendientes
   const estadoDe=(s)=>s.estadoPrestamo||"pendiente";
@@ -1973,7 +1973,7 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
   return (
     <div>
       {toast&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",padding:"10px 20px",borderRadius:10,background:toast.type==="info"?"#1e40af":"#166534",color:"white",fontWeight:700,fontSize:13,zIndex:999,boxShadow:"0 4px 20px rgba(0,0,0,.3)"}}>{toast.msg}</div>}
-      <h3 style={{color:"#f1f5f9",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>🤝 Solicitudes de préstamo permanente</h3>
+      <h3 style={{color:"#0f172a",fontSize:14,fontWeight:800,margin:"0 0 4px"}}>🤝 Solicitudes de préstamo permanente</h3>
       <p style={{color:"#64748b",fontSize:12,margin:"0 0 16px"}}>Verifica que ambos comuneros estén al día en el registro antes de aprobar.</p>
 
       {/* Registros pendientes de visado */}
@@ -1984,11 +1984,11 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
           <div style={{marginBottom:20}}>
             <div style={{fontSize:11,fontWeight:700,color:"#fb923c",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📋 Registros pendientes de visado ({pendVisado.length})</div>
             {pendVisado.map(([id,r])=>(
-              <div key={id} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1.5px solid #fb923c40",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div key={id} style={{background:"#ffffff",borderRadius:12,padding:14,marginBottom:8,border:"1.5px solid #fb923c40",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{id} — {r.nombre||"—"}</div>
-                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Torre {TORRES_LABELS[SPOT_INFO[id]?.torre]||SPOT_INFO[id]?.torre||"—"} · {SPOT_INFO[id]?.depto||"—"} · {r.fechaRegistro||"—"}</div>
-                  <div style={{fontSize:10,color:"#94a3b8"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>Estac. #{id} — {r.nombre||"—"}</div>
+                  <div style={{fontSize:10,color:"#64748b",marginTop:2}}>Torre {TORRES_LABELS[SPOT_INFO[id]?.torre]||SPOT_INFO[id]?.torre||"—"} · {SPOT_INFO[id]?.depto||"—"} · {r.fechaRegistro||"—"}</div>
+                  <div style={{fontSize:10,color:"#64748b"}}>Patentes: {(r.patentes||[]).join(", ")||"—"}</div>
                   <VerCedula id={id}/>
                 </div>
                 <button onClick={async()=>{
@@ -2022,27 +2022,27 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
         <div style={{marginBottom:20}}>
           <div style={{fontSize:11,fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>⏳ Pendientes de autorización ({pendientes.length})</div>
           {pendientes.map(s=>(
-            <div key={s.id} style={{background:"#0f172a",borderRadius:12,padding:16,marginBottom:10,border:"1.5px solid #f59e0b40"}}>
+            <div key={s.id} style={{background:"#ffffff",borderRadius:12,padding:16,marginBottom:10,border:"1.5px solid #f59e0b40"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:800,color:"white"}}>Estac. #{s.estacId} — Torre {s.torreCedente} · {s.deptoCedente}</div>
-                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Solicitado: {s.fechaSolicitud||"—"}</div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>Estac. #{s.estacId} — Torre {s.torreCedente} · {s.deptoCedente}</div>
+                  <div style={{fontSize:10,color:"#64748b",marginTop:2}}>Solicitado: {s.fechaSolicitud||"—"}</div>
                   <VerCedula id={s.id}/>
                 </div>
                 {estadoBadge(s.estadoPrestamo)}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                <div style={{background:"#1e293b",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:9,fontWeight:700,color:"#60a5fa",textTransform:"uppercase",marginBottom:6}}>Cedente</div>
-                  <div style={{fontSize:12,color:"white",fontWeight:600}}>{s.nombre||"—"}</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>{s.email||"—"}</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>Torre {s.torreCedente} · {s.deptoCedente}</div>
+                <div style={{background:"#f1f5f9",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#2563eb",textTransform:"uppercase",marginBottom:6}}>Cedente</div>
+                  <div style={{fontSize:12,color:"#0f172a",fontWeight:600}}>{s.nombre||"—"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>{s.email||"—"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>Torre {s.torreCedente} · {s.deptoCedente}</div>
                 </div>
-                <div style={{background:"#1e293b",borderRadius:8,padding:10}}>
+                <div style={{background:"#f1f5f9",borderRadius:8,padding:10}}>
                   <div style={{fontSize:9,fontWeight:700,color:"#34d399",textTransform:"uppercase",marginBottom:6}}>Beneficiario</div>
-                  <div style={{fontSize:12,color:"white",fontWeight:600}}>{s.nombreCedido||"—"}</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>{s.emailCedido||"—"}</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>Torre {s.torreCedido} · {s.deptoCedido}</div>
+                  <div style={{fontSize:12,color:"#0f172a",fontWeight:600}}>{s.nombreCedido||"—"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>{s.emailCedido||"—"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>Torre {s.torreCedido} · {s.deptoCedido}</div>
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -2058,11 +2058,11 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
         <div>
           <div style={{fontSize:11,fontWeight:700,color:"#4b5563",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Historial</div>
           {resto.map(s=>(
-            <div key={s.id} style={{background:"#0f172a",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #1f2937",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div key={s.id} style={{background:"#ffffff",borderRadius:12,padding:14,marginBottom:8,border:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Estac. #{s.estacId} — {s.nombre} → {s.nombreCedido}</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>Estac. #{s.estacId} — {s.nombre} → {s.nombreCedido}</div>
                 <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{s.fechaSolicitud||"—"} · Vence: {s.fechaVencP||"—"}</div>
-                {s.motivoRechazo&&<div style={{fontSize:10,color:"#f87171",marginTop:2}}>Motivo: {s.motivoRechazo}</div>}
+                {s.motivoRechazo&&<div style={{fontSize:10,color:"#dc2626",marginTop:2}}>Motivo: {s.motivoRechazo}</div>}
               </div>
               {estadoBadge(s.estadoPrestamo)}
             </div>
@@ -2073,13 +2073,13 @@ const SolicitudesTab = ({records={},setRecords=()=>{}}) => {
       {/* Modal rechazar */}
       {rechazarId&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
-          <div style={{background:"#0f172a",borderRadius:16,padding:24,width:"100%",maxWidth:380,border:"1.5px solid #dc2626"}}>
-            <div style={{fontSize:14,fontWeight:800,color:"white",marginBottom:12}}>✕ Rechazar solicitud</div>
-            <label style={{fontSize:11,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:6}}>Motivo del rechazo <span style={{color:"#e53e3e"}}>*</span></label>
+          <div style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:380,border:"1.5px solid #dc2626"}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:12}}>✕ Rechazar solicitud</div>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6}}>Motivo del rechazo <span style={{color:"#e53e3e"}}>*</span></label>
             <textarea value={motivo} onChange={e=>setMotivo(e.target.value)} rows={3} placeholder="Ej: El beneficiario no está al día en el registro de copropietarios."
-              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #374151",background:"#1e293b",color:"white",outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
-              <button onClick={()=>{setRechazarId(null);setMotivo("");}} style={{padding:"10px",borderRadius:8,border:"1.5px solid #374151",background:"transparent",color:"#94a3b8",fontWeight:700,fontSize:12,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={()=>{setRechazarId(null);setMotivo("");}} style={{padding:"10px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"transparent",color:"#64748b",fontWeight:700,fontSize:12,cursor:"pointer"}}>Cancelar</button>
               <button onClick={rechazar} disabled={!motivo.trim()} style={{padding:"10px",borderRadius:8,border:"none",background:motivo.trim()?"#dc2626":"#374151",color:"white",fontWeight:700,fontSize:12,cursor:motivo.trim()?"pointer":"not-allowed"}}>Confirmar rechazo</button>
             </div>
           </div>
@@ -2156,20 +2156,20 @@ const StaffScreen = ({records,setRecords,onBack}) => {
   const totalOcc=Object.keys(records).length,total=SPOTS_DATA.length;
 
   return (
-    <div style={{minHeight:"100vh",background:"#0a0f1e",fontFamily:"system-ui,sans-serif",color:"white"}}>
+    <div style={{minHeight:"100vh",background:"#f1f5f9",fontFamily:"system-ui,sans-serif",color:"#0f172a"}}>
       {/* Aviso inactividad */}
       {warningVisible&&(
         <div style={{position:"fixed",top:0,left:0,right:0,zIndex:500,background:"#854d0e",padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#fef08a"}}>⚠️ Tu sesión se cerrará en 2 minutos por inactividad</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#a16207"}}>⚠️ Tu sesión se cerrará en 2 minutos por inactividad</span>
           <button onClick={()=>{setWarningVisible(false);if(warningTimer.current)clearTimeout(warningTimer.current);}}
-            style={{padding:"4px 12px",borderRadius:6,border:"1px solid #fef08a",background:"transparent",color:"#fef08a",fontSize:12,cursor:"pointer",fontWeight:700}}>
+            style={{padding:"4px 12px",borderRadius:6,border:"1px solid #fef08a",background:"transparent",color:"#a16207",fontSize:12,cursor:"pointer",fontWeight:700}}>
             Continuar sesión
           </button>
         </div>
       )}
-      <div style={{background:"#111827",borderBottom:"1px solid #1f2937",padding:"14px 20px",position:"sticky",top:0,zIndex:50}}>
+      <div style={{background:"#ffffff",borderBottom:"1px solid #e2e8f0",padding:"14px 20px",position:"sticky",top:0,zIndex:50}}>
         <div style={{maxWidth:760,margin:"0 auto",display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={onBack} style={{background:"#0a0f1e",border:"none",color:"#64748b",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16}}>←</button>
+          <button onClick={onBack} style={{background:"#f1f5f9",border:"none",color:"#64748b",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16}}>←</button>
           <div style={{flex:1}}>
             <div style={{fontSize:10,fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:1}}>Acceso Personal</div>
             <div style={{fontSize:18,fontWeight:800}}>🔑 Panel de Control</div>
@@ -2177,10 +2177,10 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           <div style={{display:"flex",gap:14,textAlign:"right"}}>
             <div><div style={{fontSize:17,fontWeight:900,color:"#22c55e",fontFamily:"monospace"}}>{total-totalOcc}</div><div style={{fontSize:9,color:"#374151"}}>LIBRES</div></div>
             <div><div style={{fontSize:17,fontWeight:900,color:"#f59e0b",fontFamily:"monospace"}}>{totalOcc}</div><div style={{fontSize:9,color:"#374151"}}>OCUP.</div></div>
-            <div><div style={{fontSize:17,fontWeight:900,color:"#60a5fa",fontFamily:"monospace"}}>{total}</div><div style={{fontSize:9,color:"#374151"}}>TOTAL</div></div>
+            <div><div style={{fontSize:17,fontWeight:900,color:"#2563eb",fontFamily:"monospace"}}>{total}</div><div style={{fontSize:9,color:"#374151"}}>TOTAL</div></div>
           </div>
         </div>
-        <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#0a0f1e",borderRadius:10,padding:3}}>
+        <div style={{maxWidth:760,margin:"10px auto 0",display:"flex",gap:2,background:"#f1f5f9",borderRadius:10,padding:3}}>
           {[["verify","🔍","Verificar"],["list","📋","Listado"],["map","🗺️","Plano"],["dashboard","📊","Dashboard"],["reclamos","⚠️","Reclamos"],["solicitudes","🤝","Solicitudes"],["admins","👥","Admins"]].map(([k,icon,label])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:tab===k?"#2563eb":"transparent",color:tab===k?"white":"#4b5563",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
               <span>{icon}</span><span>{label}</span>
@@ -2192,30 +2192,30 @@ const StaffScreen = ({records,setRecords,onBack}) => {
       <div style={{maxWidth:760,margin:"0 auto",padding:"16px"}}>
         {tab==="verify"&&(
           <div>
-            <div style={{background:"#111827",borderRadius:16,padding:22,marginBottom:18,border:"1px solid #1f2937"}}>
-              <p style={{margin:"0 0 13px",fontSize:13,color:"#6b7280",lineHeight:1.6}}>Ingresa la patente para verificar su registro.</p>
+            <div style={{background:"#ffffff",borderRadius:16,padding:22,marginBottom:18,border:"1px solid #e2e8f0"}}>
+              <p style={{margin:"0 0 13px",fontSize:13,color:"#64748b",lineHeight:1.6}}>Ingresa la patente para verificar su registro.</p>
               <div style={{display:"flex",gap:10}}>
                 <input value={query} onChange={e=>{setQuery(e.target.value);setResult(null);}} onKeyDown={e=>e.key==="Enter"&&verify()} placeholder="ABCD12" maxLength={8}
-                  style={{flex:1,padding:"14px 16px",borderRadius:10,fontSize:20,fontWeight:900,border:"2px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:4}}/>
+                  style={{flex:1,padding:"14px 16px",borderRadius:10,fontSize:20,fontWeight:900,border:"2px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",outline:"none",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:4}}/>
                 <button onClick={verify} style={{padding:"14px 24px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Verificar</button>
               </div>
             </div>
             {result==="not_found"&&(
-              <div style={{background:"#450a0a",border:"1.5px solid #7f1d1d",borderRadius:16,padding:28,textAlign:"center"}}>
+              <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:16,padding:28,textAlign:"center"}}>
                 <div style={{fontSize:44,marginBottom:10}}>❌</div>
-                <div style={{fontSize:17,fontWeight:800,color:"#fca5a5",marginBottom:8}}>Patente no registrada</div>
-                <div style={{fontFamily:"monospace",fontSize:20,fontWeight:900,letterSpacing:4,color:"#f87171",marginBottom:12}}>{query.toUpperCase()}</div>
-                <button onClick={()=>{setQuery("");setResult(null);}} style={{padding:"9px 24px",borderRadius:8,border:"1.5px solid #7f1d1d",background:"transparent",color:"#f87171",cursor:"pointer",fontWeight:700}}>Nueva búsqueda</button>
+                <div style={{fontSize:17,fontWeight:800,color:"#b91c1c",marginBottom:8}}>Patente no registrada</div>
+                <div style={{fontFamily:"monospace",fontSize:20,fontWeight:900,letterSpacing:4,color:"#dc2626",marginBottom:12}}>{query.toUpperCase()}</div>
+                <button onClick={()=>{setQuery("");setResult(null);}} style={{padding:"9px 24px",borderRadius:8,border:"1.5px solid #fecaca",background:"transparent",color:"#dc2626",cursor:"pointer",fontWeight:700}}>Nueva búsqueda</button>
               </div>
             )}
             {result&&result!=="not_found"&&sc&&(
               <div style={{background:sc.bg,borderRadius:16,overflow:"hidden"}}>
-                <div style={{padding:"18px 22px",background:"rgba(255,255,255,.07)",borderBottom:"1px solid rgba(255,255,255,.09)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <div style={{padding:"18px 22px",background:"rgba(15,23,42,.05)",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{fontSize:38}}>✅</div>
                     <div>
                       <div style={{fontSize:11,color:sc.accent,fontWeight:700,marginBottom:2}}>Patente verificada</div>
-                      <div style={{fontSize:24,fontWeight:900,fontFamily:"monospace",letterSpacing:4,color:"white"}}>{query.toUpperCase()}</div>
+                      <div style={{fontSize:24,fontWeight:900,fontFamily:"monospace",letterSpacing:4,color:"#0f172a"}}>{query.toUpperCase()}</div>
                     </div>
                   </div>
                   <button onClick={()=>setSelectedSpot(result.spot)} style={{padding:"8px 14px",borderRadius:8,border:`1.5px solid ${sc.accent}60`,background:"rgba(255,255,255,.08)",color:sc.accent,fontWeight:700,fontSize:12,cursor:"pointer"}}>✏️ Editar</button>
@@ -2229,8 +2229,8 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                   {(result.record.propietario||result.record.nombre)&&<RowItem icon="👤" label="Residente" value={result.record.propietario||result.record.nombre}/>}
                 </div>
                 <div style={{padding:"0 22px 18px",display:"flex",gap:8}}>
-                  <button onClick={()=>setConfirmDelete(result.spot)} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #7f1d1d",background:"rgba(239,68,68,.1)",color:"#f87171",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑 Eliminar</button>
-                  <button onClick={()=>{setQuery("");setResult(null);}} style={{flex:1,padding:"10px",borderRadius:9,border:"2px solid rgba(255,255,255,.14)",background:"rgba(255,255,255,.06)",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Nueva búsqueda</button>
+                  <button onClick={()=>setConfirmDelete(result.spot)} style={{flex:1,padding:"10px",borderRadius:9,border:"1.5px solid #fecaca",background:"rgba(239,68,68,.1)",color:"#dc2626",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑 Eliminar</button>
+                  <button onClick={()=>{setQuery("");setResult(null);}} style={{flex:1,padding:"10px",borderRadius:9,border:"2px solid #e2e8f0",background:"rgba(15,23,42,.05)",color:"#0f172a",fontWeight:700,fontSize:13,cursor:"pointer"}}>Nueva búsqueda</button>
                 </div>
               </div>
             )}
@@ -2239,16 +2239,16 @@ const StaffScreen = ({records,setRecords,onBack}) => {
 
         {tab==="list"&&(
           <div>
-            <div style={{background:"#111827",borderRadius:13,padding:12,marginBottom:12,border:"1px solid #1f2937",display:"flex",gap:8,flexWrap:"wrap"}}>
+            <div style={{background:"#ffffff",borderRadius:13,padding:12,marginBottom:12,border:"1px solid #e2e8f0",display:"flex",gap:8,flexWrap:"wrap"}}>
               <input value={searchList} onChange={e=>setSearchList(e.target.value)} placeholder="Buscar patente, torre, depto..."
-                style={{flex:1,minWidth:150,padding:"8px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",outline:"none",fontFamily:"inherit"}}/>
+                style={{flex:1,minWidth:150,padding:"8px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",outline:"none",fontFamily:"inherit"}}/>
               <select value={filterSector} onChange={e=>setFilterSector(e.target.value)}
-                style={{padding:"8px 10px",borderRadius:8,fontSize:12,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",cursor:"pointer"}}>
+                style={{padding:"8px 10px",borderRadius:8,fontSize:12,border:"1.5px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",cursor:"pointer"}}>
                 <option value="all">Todos los sectores</option>
                 {[1,2,3].map(s=><option key={s} value={s}>{SECTOR_NAMES[s]}</option>)}
               </select>
               <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
-                style={{padding:"8px 10px",borderRadius:8,fontSize:12,border:"1.5px solid #1f2937",background:"#0a0f1e",color:"white",cursor:"pointer"}}>
+                style={{padding:"8px 10px",borderRadius:8,fontSize:12,border:"1.5px solid #e2e8f0",background:"#f1f5f9",color:"#0f172a",cursor:"pointer"}}>
                 <option value="id">N° Estac.</option><option value="torre">Torre</option>
                 <option value="depto">Depto</option><option value="sector">Sector</option>
               </select>
@@ -2285,15 +2285,15 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             <div style={{display:"flex",gap:8,marginBottom:12}}>
               {Object.entries(SC).map(([sid,sc2])=>{
                 const ss=SPOTS_DATA.filter(s=>s.sector===Number(sid)),occ=ss.filter(s=>records[s.id]).length;
-                return <div key={sid} style={{flex:1,background:"#111827",borderRadius:10,padding:"9px 11px",border:`1px solid ${sc2.accent}30`,borderLeft:`3px solid ${sc2.accent}`}}>
+                return <div key={sid} style={{flex:1,background:"#ffffff",borderRadius:10,padding:"9px 11px",border:`1px solid ${sc2.accent}30`,borderLeft:`3px solid ${sc2.accent}`}}>
                   <div style={{fontSize:8,color:sc2.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>S{sid}</div>
-                  <div style={{fontSize:16,fontWeight:900,fontFamily:"monospace",color:"white"}}>{occ}<span style={{fontSize:10,color:"#374151"}}>/{ss.length}</span></div>
-                  <div style={{height:3,background:"#0a0f1e",borderRadius:2,marginTop:4}}><div style={{height:"100%",width:`${occ/ss.length*100}%`,background:sc2.accent,borderRadius:2}}/></div>
+                  <div style={{fontSize:16,fontWeight:900,fontFamily:"monospace",color:"#0f172a"}}>{occ}<span style={{fontSize:10,color:"#374151"}}>/{ss.length}</span></div>
+                  <div style={{height:3,background:"#f1f5f9",borderRadius:2,marginTop:4}}><div style={{height:"100%",width:`${occ/ss.length*100}%`,background:sc2.accent,borderRadius:2}}/></div>
                 </div>;
               })}
             </div>
-            <div style={{background:"#111827",borderRadius:14,overflow:"hidden",border:"1px solid #1f2937"}}>
-              <div style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"8px 14px",background:"#0a0f1e",borderBottom:"1px solid #1f2937",fontSize:10,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5}}>
+            <div style={{background:"#ffffff",borderRadius:14,overflow:"hidden",border:"1px solid #e2e8f0"}}>
+              <div style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"8px 14px",background:"#f1f5f9",borderBottom:"1px solid #e2e8f0",fontSize:10,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5}}>
                 <span>Estac.</span><span>Torre</span><span>Depto</span><span>Patente(s)</span><span>Sector</span><span>Fecha</span><span>Acciones</span>
               </div>
               {listedSpots.length===0&&<div style={{padding:32,textAlign:"center",color:"#374151",fontSize:13}}>{totalOcc===0?"No hay registros aún.":"Sin resultados."}</div>}
@@ -2301,13 +2301,13 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                 const rec=records[s.id],sc2=SC[s.sector];
                 const fechaReg=rec.createdAt?.toDate?.()?.toLocaleDateString("es-CL")||rec.fechaRegistro||rec.updatedAt?(new Date(rec.updatedAt)).toLocaleDateString("es-CL"):"—";
                 const esPendiente=rec.estadoRegistro==="pendiente";
-                return <div key={s.id} style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"10px 14px",borderBottom:i<listedSpots.length-1?"1px solid #0f172a":"none",alignItems:"center",fontSize:12,background:esPendiente?"rgba(245,158,11,.04)":"transparent"}}>
+                return <div key={s.id} style={{display:"grid",gridTemplateColumns:"50px 62px 60px 1fr 68px 80px 84px",padding:"10px 14px",borderBottom:i<listedSpots.length-1?"1px solid #f1f5f9":"none",alignItems:"center",fontSize:12,background:esPendiente?"rgba(245,158,11,.04)":"transparent"}}>
                   <div style={{width:34,height:34,borderRadius:8,background:sc2.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:11,color:sc2.accent,position:"relative"}}>
                     #{s.id}
-                    {esPendiente&&<div style={{position:"absolute",top:-4,right:-4,width:8,height:8,borderRadius:"50%",background:"#f59e0b",border:"1.5px solid #0a0f1e"}}/>}
+                    {esPendiente&&<div style={{position:"absolute",top:-4,right:-4,width:8,height:8,borderRadius:"50%",background:"#f59e0b",border:"1.5px solid #ffffff"}}/>}
                   </div>
-                  <span style={{color:"#94a3b8",fontFamily:"monospace",fontSize:11}}>{s.torre}</span>
-                  <span style={{color:"#94a3b8",fontFamily:"monospace",fontWeight:700}}>{s.depto}</span>
+                  <span style={{color:"#64748b",fontFamily:"monospace",fontSize:11}}>{s.torre}</span>
+                  <span style={{color:"#64748b",fontFamily:"monospace",fontWeight:700}}>{s.depto}</span>
                   <div>
                     {rec.patentes?.map((p,pi)=><span key={pi} style={{display:"inline-block",marginRight:4,marginBottom:2,padding:"2px 6px",borderRadius:5,background:sc2.bg,color:sc2.accent,fontFamily:"monospace",fontSize:11,fontWeight:700}}>{p}</span>)}
                     {(rec.propietario||rec.nombre)&&<div style={{fontSize:10,color:"#374151",marginTop:2}}>{rec.propietario||rec.nombre}</div>}
@@ -2319,13 +2319,13 @@ const StaffScreen = ({records,setRecords,onBack}) => {
                     {esPendiente&&<button onClick={async()=>{
                       await updateSolicitud(s.id,{estadoRegistro:"visado"});
                       setRecords(r=>({...r,[s.id]:{...r[s.id],estadoRegistro:"visado"}}));
-                    }} style={{padding:"4px 7px",borderRadius:6,border:"1.5px solid #166534",background:"rgba(22,163,74,.15)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:700}} title="Visar registro">✅</button>}
-                    <button onClick={()=>setSelectedSpot(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #1e3a5f",background:"rgba(37,99,235,.12)",color:"#60a5fa",cursor:"pointer",fontSize:13}}>✏️</button>
-                    <button onClick={()=>setConfirmDelete(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #7f1d1d",background:"rgba(239,68,68,.1)",color:"#f87171",cursor:"pointer",fontSize:13}}>🗑</button>
+                    }} style={{padding:"4px 7px",borderRadius:6,border:"1.5px solid #166534",background:"rgba(22,163,74,.15)",color:"#16a34a",cursor:"pointer",fontSize:11,fontWeight:700}} title="Visar registro">✅</button>}
+                    <button onClick={()=>setSelectedSpot(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #1e3a5f",background:"rgba(37,99,235,.12)",color:"#2563eb",cursor:"pointer",fontSize:13}}>✏️</button>
+                    <button onClick={()=>setConfirmDelete(s)} style={{padding:"5px 8px",borderRadius:6,border:"1.5px solid #fecaca",background:"rgba(239,68,68,.1)",color:"#dc2626",cursor:"pointer",fontSize:13}}>🗑</button>
                   </div>
                 </div>;
               })}
-              {listedSpots.length>0&&<div style={{padding:"9px 14px",borderTop:"1px solid #1f2937",fontSize:11,color:"#374151",display:"flex",justifyContent:"space-between"}}><span>{listedSpots.length} de {totalOcc} registros</span><span>{total-totalOcc} espacios libres</span></div>}
+              {listedSpots.length>0&&<div style={{padding:"9px 14px",borderTop:"1px solid #e2e8f0",fontSize:11,color:"#374151",display:"flex",justifyContent:"space-between"}}><span>{listedSpots.length} de {totalOcc} registros</span><span>{total-totalOcc} espacios libres</span></div>}
             </div>
           </div>
         )}
@@ -2368,9 +2368,9 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             .slice(0,5);
 
           const StatCard=({label,value,sub,color})=>(
-            <div style={{background:"#111827",borderRadius:12,padding:"14px 16px",border:`1px solid ${color}30`,borderLeft:`3px solid ${color}`,flex:1,minWidth:120}}>
+            <div style={{background:"#ffffff",borderRadius:12,padding:"14px 16px",border:`1px solid ${color}30`,borderLeft:`3px solid ${color}`,flex:1,minWidth:120}}>
               <div style={{fontSize:28,fontWeight:900,color,fontFamily:"monospace"}}>{value}</div>
-              <div style={{fontSize:12,fontWeight:700,color:"white",marginTop:2}}>{label}</div>
+              <div style={{fontSize:12,fontWeight:700,color:"#0f172a",marginTop:2}}>{label}</div>
               {sub&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{sub}</div>}
             </div>
           );
@@ -2389,26 +2389,26 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>
 
             {/* Barra ocupación total */}
-            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
+            <div style={{background:"#ffffff",borderRadius:12,padding:16,border:"1px solid #e2e8f0"}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                <span style={{fontSize:12,fontWeight:700,color:"white"}}>Ocupación total</span>
+                <span style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>Ocupación total</span>
                 <span style={{fontSize:12,fontWeight:900,color:"#f59e0b",fontFamily:"monospace"}}>{pctOcc}%</span>
               </div>
-              <div style={{height:10,background:"#1e293b",borderRadius:5,overflow:"hidden"}}>
+              <div style={{height:10,background:"#f1f5f9",borderRadius:5,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${pctOcc}%`,background:"linear-gradient(90deg,#f59e0b,#ef4444)",borderRadius:5,transition:"width .5s"}}/>
               </div>
             </div>
 
             {/* Por sector */}
-            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
-              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>📍 Ocupación por sector</div>
+            <div style={{background:"#ffffff",borderRadius:12,padding:16,border:"1px solid #e2e8f0"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:12}}>📍 Ocupación por sector</div>
               {bySector.map(s=>(
                 <div key={s.sid} style={{marginBottom:12}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                     <span style={{fontSize:11,color:SC[s.sid].accent,fontWeight:600}}>{s.name}</span>
-                    <span style={{fontSize:11,color:"#94a3b8",fontFamily:"monospace"}}>{s.occ}/{s.total} — {s.pct}%</span>
+                    <span style={{fontSize:11,color:"#64748b",fontFamily:"monospace"}}>{s.occ}/{s.total} — {s.pct}%</span>
                   </div>
-                  <div style={{height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:8,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${s.pct}%`,background:SC[s.sid].accent,borderRadius:4,transition:"width .5s"}}/>
                   </div>
                 </div>
@@ -2416,14 +2416,14 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>
 
             {/* Por tipo residente */}
-            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
-              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>👤 Por tipo de residente</div>
+            <div style={{background:"#ffffff",borderRadius:12,padding:16,border:"1px solid #e2e8f0"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:12}}>👤 Por tipo de residente</div>
               {Object.entries(byTipo).filter(([,v])=>v>0).map(([k,v])=>(
                 <div key={k} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                   <div style={{width:8,height:8,borderRadius:"50%",background:tipoColors[k],flexShrink:0}}/>
-                  <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{tipoL[k]}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:"white",fontFamily:"monospace"}}>{v}</span>
-                  <div style={{width:60,height:6,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                  <span style={{fontSize:11,color:"#64748b",flex:1}}>{tipoL[k]}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#0f172a",fontFamily:"monospace"}}>{v}</span>
+                  <div style={{width:60,height:6,background:"#f1f5f9",borderRadius:3,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${Math.round(v/totalOcc2*100)}%`,background:tipoColors[k],borderRadius:3}}/>
                   </div>
                 </div>
@@ -2431,14 +2431,14 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>
 
             {/* Por uso */}
-            <div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
-              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>🚗 Por uso del estacionamiento</div>
+            <div style={{background:"#ffffff",borderRadius:12,padding:16,border:"1px solid #e2e8f0"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:12}}>🚗 Por uso del estacionamiento</div>
               {Object.entries(byUso).filter(([,v])=>v>0).map(([k,v])=>(
                 <div key={k} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                   <div style={{width:8,height:8,borderRadius:"50%",background:usoColors[k],flexShrink:0}}/>
-                  <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{usoL[k]}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:"white",fontFamily:"monospace"}}>{v}</span>
-                  <div style={{width:60,height:6,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                  <span style={{fontSize:11,color:"#64748b",flex:1}}>{usoL[k]}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#0f172a",fontFamily:"monospace"}}>{v}</span>
+                  <div style={{width:60,height:6,background:"#f1f5f9",borderRadius:3,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${Math.round(v/totalOcc2*100)}%`,background:usoColors[k],borderRadius:3}}/>
                   </div>
                 </div>
@@ -2446,15 +2446,15 @@ const StaffScreen = ({records,setRecords,onBack}) => {
             </div>
 
             {/* Registros recientes */}
-            {recientes.length>0&&<div style={{background:"#111827",borderRadius:12,padding:16,border:"1px solid #1f2937"}}>
-              <div style={{fontSize:12,fontWeight:700,color:"white",marginBottom:12}}>🕐 Últimos registros</div>
+            {recientes.length>0&&<div style={{background:"#ffffff",borderRadius:12,padding:16,border:"1px solid #e2e8f0"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:12}}>🕐 Últimos registros</div>
               {recientes.map(([id,rec])=>{
                 const spot=SPOTS_DATA.find(s=>s.id===Number(id));
                 const sc2=SC[spot?.sector||1];
-                return <div key={id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,paddingBottom:10,borderBottom:"1px solid #1e293b"}}>
+                return <div key={id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,paddingBottom:10,borderBottom:"1px solid #e2e8f0"}}>
                   <div style={{width:36,height:36,borderRadius:8,background:sc2.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:900,fontSize:11,color:sc2.accent,flexShrink:0}}>#{id}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"white"}}>{rec.nombre||"Sin nombre"}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{rec.nombre||"Sin nombre"}</div>
                     <div style={{fontSize:10,color:"#4b5563"}}>{TORRES_LABELS[spot?.torre]||spot?.torre} · {spot?.depto}</div>
                   </div>
                   <div style={{textAlign:"right"}}>
@@ -2470,18 +2470,18 @@ const StaffScreen = ({records,setRecords,onBack}) => {
           <div>
             {[1,2,3].map(sid=>{
               const sc2=SC[sid],sSpots=SPOTS_DATA.filter(s=>s.sector===sid),occ=sSpots.filter(s=>records[s.id]).length;
-              return <div key={sid} style={{background:"#111827",borderRadius:16,overflow:"hidden",marginBottom:14,border:`1px solid ${sc2.accent}30`}}>
+              return <div key={sid} style={{background:"#ffffff",borderRadius:16,overflow:"hidden",marginBottom:14,border:`1px solid ${sc2.accent}30`}}>
                 <div style={{padding:"12px 16px",background:sc2.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{fontWeight:800,fontSize:13,color:sc2.accent}}>📍 {SECTOR_NAMES[sid]}</div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:16,fontWeight:900,fontFamily:"monospace",color:sc2.accent}}>{occ}<span style={{fontSize:10,color:"rgba(255,255,255,.4)"}}>/{sSpots.length}</span></div>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,.4)",textTransform:"uppercase"}}>ocupados</div>
+                    <div style={{fontSize:16,fontWeight:900,fontFamily:"monospace",color:sc2.accent}}>{occ}<span style={{fontSize:10,color:"#64748b"}}>/{sSpots.length}</span></div>
+                    <div style={{fontSize:9,color:"#64748b",textTransform:"uppercase"}}>ocupados</div>
                   </div>
                 </div>
                 <div style={{padding:10,overflowX:"auto"}}>
                   <SectorMap sectorId={sid} records={records} onSpotClick={s=>setSelectedSpot(s)} highlightId={null}/>
                 </div>
-                <div style={{padding:"8px 14px 10px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",background:"#0f172a"}}>
+                <div style={{padding:"8px 14px 10px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",background:"#ffffff"}}>
                   <Legend color="#22c55e" label="Uso exclusivo"/>
                   <Legend color="#3b82f6" label="Visitas"/>
                   <Legend color="#a855f7" label="Cedido"/>
@@ -2554,10 +2554,10 @@ export default function App() {
   },[]);
 
   if(enCondo&&condoMsg)return(
-    <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontFamily:"system-ui",fontSize:14,padding:20,textAlign:"center"}}>{condoMsg}</div>
+    <div style={{minHeight:"100vh",background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",color:"#64748b",fontFamily:"system-ui",fontSize:14,padding:20,textAlign:"center"}}>{condoMsg}</div>
   );
   if(loading)return(
-    <div style={{minHeight:"100vh",background:"#0a0f1e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+    <div style={{minHeight:"100vh",background:"#f1f5f9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <div style={{width:50,height:50,border:"3px solid #1e3a5f",borderTop:"3px solid #3b82f6",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
       <div style={{color:"#4b5563",fontSize:13,fontFamily:"monospace"}}>Cargando...</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
