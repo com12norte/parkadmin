@@ -866,9 +866,9 @@ const StaffLogin = ({onSuccess,onBack}) => {
           <h2 style={{margin:0,fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:-0.5}}>Acceso Personal</h2>
           <p style={{margin:"6px 0 0",fontSize:13,color:"#4b5563"}}>Administración · Conserjería</p>
           {window.self===window.top&&<a href="https://condoadmin-rouge.vercel.app/" style={{display:"block",marginTop:16,background:"#1e3a5f",color:"white",textDecoration:"none",fontWeight:700,fontSize:14,padding:"11px",borderRadius:10}}>Entrar por CondoAdmin →</a>}
-          {window.self===window.top&&<p style={{margin:"8px 0 0",fontSize:12,color:"#64748b"}}>La administración entra con su usuario de CondoAdmin (menú Administración → Parking). Si no puedes, ingresa aquí:</p>}
+          {window.self===window.top&&<p style={{margin:"8px 0 0",fontSize:12,color:"#64748b"}}>La administración de Parking ahora está dentro de CondoAdmin (sección Parking), con tu usuario.{!new URLSearchParams(window.location.search).has("antiguo")&&<> <a href="?ir=personal&antiguo=1" style={{color:"#94a3b8"}}>Acceso de respaldo</a></>}</p>}
         </div>
-        <div style={{background:"#ffffff",borderRadius:18,padding:24,border:"1px solid #e2e8f0",boxShadow:"0 20px 50px rgba(0,0,0,.4)"}}>
+        <div style={{background:"#ffffff",borderRadius:18,padding:24,border:"1px solid #e2e8f0",boxShadow:"0 20px 50px rgba(0,0,0,.4)",display:(window.self!==window.top||new URLSearchParams(window.location.search).has("antiguo"))?"block":"none"}}>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>Correo electrónico</label>
