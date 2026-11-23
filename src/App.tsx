@@ -918,7 +918,7 @@ const HomeScreen = ({onGo}) => {
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:390}}>
         {card("🏠","Soy Residente","Registra tus patentes y consulta tu estacionamiento asignado","resident","linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",100)}
-        {card("🔑","Acceso Personal","Verificar patente · Administración · Conserjería","staff","linear-gradient(135deg,#1e3a5f 0%,#2e5490 100%)",210)}
+        {card("🔑","Administración","Se administra desde CondoAdmin, con tu usuario","staff","linear-gradient(135deg,#1e3a5f 0%,#2e5490 100%)",210)}
       </div>
       <div style={{marginTop:38,display:"flex",gap:18,transform:show?"translateY(0)":"translateY(10px)",opacity:show?1:0,transition:"all .6s 350ms"}}>
         {Object.entries(SC).map(([k,sc])=>(
@@ -2567,12 +2567,7 @@ export default function App() {
   );
 
   if(screen==="resident") return <ResidentScreen records={records} setRecords={setRecordsAndSync} setLocal={setRecords} onBack={()=>setScreen("home")}/>;
-  if(screen==="staff"){
-    if(!staffAuth) return <StaffLogin onSuccess={entrarPersonal} onBack={()=>setScreen("home")}/>;
-    return <StaffScreen records={records} setRecords={setRecordsAndSync} onBack={()=>{
-      cerrarSesion();setStaffAuth(false);setScreen("home");
-      loadOcupacion().then(d=>setRecords(d));
-    }}/>;
-  }
+  // La administración de Parking se trasladó a CondoAdmin (sección Parking)
+  if(screen==="staff"){ window.location.replace("https://condoadmin-rouge.vercel.app/"); return <div style={{padding:30,fontFamily:"system-ui,sans-serif",color:"#64748b"}}>Abriendo CondoAdmin…</div>; }
   return <HomeScreen onGo={setScreen}/>;
 }
